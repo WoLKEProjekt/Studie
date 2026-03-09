@@ -1,2 +1,2 @@
-# WoLKE Study 2026
-Data of the WoLKE-project main study in 2026.
+# WoLKE Study
+Data of the WoLKE-project overall results.
