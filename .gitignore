@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+/.quarto/
+
+.DS_Store
+
+*.csv
+
+WoLKE-Study-2026_cache/

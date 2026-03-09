@@ -1,0 +1,107 @@
+# Continuation of only CTT Analysis
+
+```{r load-libraries-and-functions}
+#| output: false
+library(this.path)
+library(dplyr) #e.g. for select
+library(tidyr) # for reshaping data
+library(stringdist) #levenshtein
+library(stringr) # for reshaping data
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(modelsummary)
+library(kableExtra)
+library(arsenal)
+library(forcats) 
+source(file="functions.r") # all outsourced funtions
+```
+
+```{r CTT}
+setwd(this.path::this.dir())
+# requires data.Rdata from WoLKE-Pilot-2025.qmd file
+# load data
+load("data/data.Rdata")
+
+# CT-Score aus CT28_01 übernehmen (-1/-9 als NA) und als CT_total_mean setzen
+data <- data %>%
+  mutate(
+    CT28_01 = suppressWarnings(as.numeric(CT28_01)),
+    CT28_01 = ifelse(CT28_01 %in% c(-1, -9), NA, CT28_01),
+    CT_total_mean = CT28_01
+  )
+
+data_sprache <- data %>%
+  filter(group == "sprache") %>%
+  group_by(code) %>%
+  filter(all(c("pre", "post") %in% time)) %>%
+  ungroup()
+
+# 1. MINT-Daten mit Pre- und Posttest
+data_mint <- data %>%
+  filter(group == "mint") %>%
+  group_by(code) %>%
+  filter(all(c("pre", "post") %in% time)) %>%
+  ungroup()
+# 2. Subset nur für PH Schwäbisch Gmünd
+data_mint_sg <- data_mint %>%
+  filter(location == "PH Schwäbisch Gmünd")
+
+# Pre/Post-Effekt auf CT
+model_ct_sprache <- lmer(
+  CT_total_mean ~ time + age + gender + (1 | code),
+  data = data_sprache
+)
+summary(model_ct_sprache)
+
+# Deskriptiv: CT nach Zeit (Sprache)
+ct_desc_sprache <- data_sprache %>%
+  group_by(time) %>%
+  summarise(
+    n    = sum(!is.na(CT_total_mean)),
+    mean = mean(CT_total_mean, na.rm = TRUE),
+    sd   = sd(CT_total_mean,   na.rm = TRUE),
+    .groups = "drop"
+  )
+knitr::kable(ct_desc_sprache, caption = "CT (Sprache): Deskriptive Statistiken Pre/Post")
+
+
+#### CT (Computational Thinking) – MINT ####
+
+# Gesamt MINT: Haupteffekt Zeit
+model_ct_time_mint <- lmer(
+  CT_total_mean ~ time + age + gender + (1 | code),
+  data = data_mint
+)
+summary(model_ct_time_mint)
+
+# Gesamt MINT: Zeit * Intervention
+model_ct_timeXint_mint <- lmer(
+  CT_total_mean ~ time * intervention + age + gender + (1 | code),
+  data = data_mint
+)
+summary(model_ct_timeXint_mint)
+
+# Gesamt MINT: Zeit * Location
+model_ct_timeXloc_mint <- lmer(
+  CT_total_mean ~ time * location + age + gender + (1 | code),
+  data = data_mint
+)
+summary(model_ct_timeXloc_mint)
+
+# Nur PH Schwäbisch Gmünd
+data_mint_sg <- data_mint %>% filter(location == "PH Schwäbisch Gmünd")
+
+model_ct_time_mint_sg <- lmer(
+  CT_total_mean ~ time + age + gender + (1 | code),
+  data = data_mint_sg
+)
+summary(model_ct_time_mint_sg)
+
+model_ct_timeXint_mint_sg <- lmer(
+  CT_total_mean ~ time * intervention + age + gender + (1 | code),
+  data = data_mint_sg
+)
+summary(model_ct_timeXint_mint_sg)
+
+```
