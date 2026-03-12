@@ -1,5 +1,5 @@
 ---
-title: "WoLKE-Studie-2026"
+title: "WoLKE-Studie"
 author: "Benedikt Beuttler"
 date: "`r Sys.Date()`"
 lang: en
@@ -79,7 +79,16 @@ p_load(stringdist, psych)
 p_load(lavaan, lme4, lmerTest, emmeans, estimatr)
 
 ## Tabellen/Reporting
-p_load(modelsummary, kableExtra, arsenal)
+# install.packages("remotes")
+
+# remotes::install_version(
+#   "modelsummary",
+#   version = "2.5.0",
+#   repos = "https://cran.r-project.org"
+# )
+
+p_load(modelsummary)
+p_load(kableExtra, arsenal)
 
 ## Visualisierung/Themes
 p_load(ggplot2, ggsci, jtools)
@@ -99,47 +108,112 @@ if (is_word) {
 
 ```
 
-
 ## Load Pre- and Posttest and Reshape Data
 
+```{r analysis-setup}
+#define vars
+covars <- c(
+  "time",
+  "gender",
+  "semester",
+  "location",
+  "intervention",
+  "age",
+  "students",
+  "group"
+)
+controls <- c("gender", "semester", "location")
+random_terms_lmer <- c("(1 | code)")
+groups <- c("intervention")
+time <- "time"
+outcomes <- c(
+  "AILIT",
+  "AILIT26",
+  "AILITwolke",
+  "AILITglat",
+  "TK",
+  "TPK",
+  "TCK",
+  "TPACKce",
+  "TPACKgenai",
+  "Ethics",
+  "CEA",
+  "PU"
+)
+outcomes_ailit <- c("AILIT", "AILIT26", "AILITwolke", "AILITglat")
+outcomes_tpack <- c("TK", "TPK", "TCK", "TPACKce", "TPACKgenai", "Ethics")
+q_column_names <- c("AI", "GL", "TP", "RE02", "ED", "NP")
+vars_num <- c("age", "semester") # numeric outcomes
+vars_cat <- c("gender", "students") # categorical outcomes`
+```
+
 ```{r load and prepare data}
-prepare_data <- FALSE
-if (prepare_data) {
-  # Set working directory to the script's location
-  # safe working-directory selection (replace setwd(this.path::this.dir()))
-  wd <- tryCatch(this.path::this.dir(), error = function(e) NULL)
 
-  if (is.null(wd)) {
-    wd <- tryCatch(
-      {
-        if (
-          requireNamespace("rstudioapi", quietly = TRUE) &&
-            rstudioapi::isAvailable()
-        ) {
-          dirname(rstudioapi::getActiveDocumentContext()$path)
-        } else if (requireNamespace("here", quietly = TRUE)) {
-          here::here()
-        } else {
-          getwd()
-        }
-      },
-      error = function(e) getwd()
+# load pre-prepared data
+# 25
+load("data/25/25-data_all.Rdata") # nicht nach pre und posttest gefiltert
+load("data/25/25-data.Rdata") # probanden mit pre UND posttest
+# 26
+load("data/26/26-data_all.Rdata") # nicht nach pre und posttest gefiltert
+load("data/26/26-data.Rdata") # probanden mit pre UND posttest
+# load all Rdata from folder /data/dropouts
+files <- list.files(
+  "data/26/dropouts",
+  pattern = "\\.Rdata$",
+  full.names = TRUE
+)
+invisible(lapply(files, load, envir = .GlobalEnv))
+
+data_merged <- bind_rows(
+  data_25 %>%
+    select(
+      code,
+      starts_with(q_column_names, ignore.case = FALSE),
+      all_of(covars)
+    ) %>%
+    mutate(
+      wave = "sose25",
+      across(c(starts_with(q_column_names), semester, age), as.integer)
+    ),
+
+  data_26 %>%
+    select(
+      code,
+      starts_with(q_column_names, ignore.case = FALSE),
+      all_of(covars)
+    ) %>%
+    mutate(
+      wave = "wise26",
+      across(c(starts_with(q_column_names), semester, age), as.integer)
     )
-  }
-  setwd(normalizePath(wd))
+)
 
-  # execute load_prepare_data.r to load and prepare the data via source command
-  suppressMessages(source("./data/load_prepare_data.r"))
-} else {
-  # load pre-prepared data
-  load("data/data_all.Rdata") # nicht nach pre und posttest gefiltert
-  load("data/data.Rdata") # probanden mit pre UND posttest
-  # load all Rdata from folder /data/dropouts
-  files <- list.files("data/dropouts", pattern = "\\.Rdata$", full.names = TRUE)
-  lapply(files, load, envir = .GlobalEnv)
-}
+data_all_merged <- bind_rows(
+  data_all_25 %>%
+    select(
+      code,
+      starts_with(q_column_names),
+      all_of(covars)
+    ) %>%
+    mutate(
+      wave = "sose25",
+      across(c(starts_with(q_column_names), semester, age), as.integer)
+    ),
 
-data_pre <- data %>% filter(time == "pre")
+  data_all_26 %>%
+    select(
+      code,
+      starts_with(q_column_names),
+      all_of(covars)
+    ) %>%
+    mutate(
+      wave = "wise26",
+      across(c(starts_with(q_column_names), semester, age), as.integer)
+    )
+)
+
+data_merged_pre <- data_merged %>% filter(time == "pre")
+data_all_merged_pre <- data_all_merged %>% filter(time == "pre")
 
 ```
 
@@ -149,57 +223,108 @@ data_pre <- data %>% filter(time == "pre")
 ## TPACK
 # all TPACK items used
 list_items_i_tpack <- list(
-  "TK" = grep("^TP01_", names(data), value = T),
-  "TPK" = grep("^TP02_", names(data), value = T),
-  "TCK" = grep("^TP03_", names(data), value = T),
-  "TPACK_ce" = grep("^TP04_(0[1-8]|12|15)$", names(data), value = T), # Sub-Subskala 1: Celik Enhanced Items
-  "TPACK_genai" = grep("^TP04_(09|10|11|13|14)$", names(data), value = T), # Sub-Subskala 2: GenAI Items
-  "Ethics" = grep("^TP05_0[1-6]$", names(data), value = T) #im pretest nur items 1-6 vorhanden 7,8 kamen im post dazu
+  "TK" = grep("^TP01_", names(data_merged), value = T),
+  "TPK" = grep("^TP02_", names(data_merged), value = T),
+  "TCK" = grep("^TP03_", names(data_merged), value = T),
+  "TPACK_ce" = grep("^TP04_(0[1-8]|12|15)$", names(data_merged), value = T), # Sub-Subskala 1: Celik Enhanced Items
+  "TPACK_genai" = grep(
+    "^TP04_(09|10|11|13|14)$",
+    names(data_merged),
+    value = T
+  ), # Sub-Subskala 2: GenAI Items
+  "Ethics" = grep("^TP05_0[1-6]$", names(data_merged), value = T) #im pretest nur items 1-6 vorhanden 7,8 kamen im post dazu
+)
+
+## Perceived Usefulnes
+list_items_pu <- list(
+  "Pu" = grep("^ED03_", names(data_merged), value = T)
 )
 
 # ein paar ethik items müssen noch rausgenommen werden, die nur im posttest erhoben wurden. hier nur check
 # data_subset1 <- data %>% select(all_of(unlist(list_items_i_tpack)))
 # View(data_subset1)
 
-## Reflection
-list_items_ref <- list(
-  "Ref" = grep("^RE02_", names(data), value = T)
+## Critical Evaluation of AI
+list_items_cea <- list(
+  "CEA" = grep("^RE02_(0[1-9])$", names(data_merged), value = T),
+  "CEA_understanding" = grep("^RE02_(0[1-4])$", names(data_merged), value = T),
+  "CEA_ped" = grep("^RE02_(0[5-9])$", names(data_merged), value = T)
 )
-# data_subset3 <- data %>% select(all_of(unlist(list_items_ref)))
+# data_subset3 <- data %>% select(all_of(unlist(list_items_cea)))
 # sum(data_subset3 < 0, na.rm = TRUE)
 
 ## AI Literacy
-# data <- data %>% mutate(AILIT = AI35_02) # rename to sumscore
+ailit_wolke_items <- c(
+  "AI36_04",
+  "AI36_10",
+  "AI36_11",
+  "AI36_13",
+  "AI36_15",
+  "AI36_16",
+  "AI36_17",
+  "AI36_19",
+  "AI36_24",
+  "AI36_25",
+  "AI36_27"
+)
+ailit_glat_items <- c(
+  "GL21_01",
+  "GL21_02",
+  "GL21_03",
+  "GL21_04",
+  "GL21_05",
+  "GL21_06",
+  "GL21_07",
+  "GL21_08",
+  "GL21_09",
+  "GL21_10",
+  "GL21_11",
+  "GL21_12",
+  "GL21_13",
+  "GL21_14",
+  "GL21_15",
+  "GL21_16",
+  "GL21_17",
+  "GL21_18",
+  "GL21_19"
+)
+
 list_items_ailit <- list(
   "ailit" = grep(
-    "^(AI36_04|AI36_10|AI36_11|AI36_13|AI36_15|AI36_16|AI36_17|AI36_19|AI36_24|AI36_25|AI36_27|GL21_01|GL21_02|GL21_03|GL21_04|GL21_05|GL21_06|GL21_07|GL21_08|GL21_09|GL21_10|GL21_11|GL21_12|GL21_13|GL21_14|GL21_15|GL21_16|GL21_17|GL21_18|GL21_19)", # results of all ailit items
-    names(data),
-    value = T
+    paste0(
+      "^(",
+      paste(c(ailit_wolke_items, ailit_glat_items), collapse = "|"),
+      ")$"
+    ),
+    names(data_merged),
+    value = TRUE
   ),
-  "ailit_horn" = grep(
-    "^(AI36_04|AI36_10|AI36_11|AI36_13|AI36_15|AI36_16|AI36_17|AI36_19|AI36_24|AI36_25|AI36_27)",
-    names(data),
-    value = T
-  ), # Hornberger items
+  "ailit_wolke" = grep(
+    paste0("^(", paste(ailit_wolke_items, collapse = "|"), ")$"),
+    names(data_merged),
+    value = TRUE
+  ),
   "ailit_glat" = grep(
-    "^(GL21_01|GL21_02|GL21_03|GL21_04|GL21_05|GL21_06|GL21_07|GL21_08|GL21_09|GL21_10|GL21_11|GL21_12|GL21_13|GL21_14|GL21_15|GL21_16|GL21_17|GL21_18|GL21_19)",
-    names(data),
-    value = T
-  ) # GLAT items
+    paste0("^(", paste(ailit_glat_items, collapse = "|"), ")$"),
+    names(data_merged),
+    value = TRUE
+  )
 )
 
 # create new columns with the means of the lists
-data <- data %>%
+data_merged <- data_merged %>%
   mutate(
     AILIT = rowSums(cbind(AI35_02, GL20_01), na.rm = TRUE), # default sumscore overall AI Lit
-    AILIThorn = rowSums(
-      select(., all_of(list_items_ailit$ailit_horn)),
+    AILIT26 = if_else(
+      wave == "wise26",
+      rowSums(cbind(AI35_02, GL20_01), na.rm = TRUE),
+      NA_real_
+    ),
+    AILITwolke = rowSums(
+      select(., all_of(list_items_ailit$ailit_wolke)),
       na.rm = TRUE
     ),
-    AILITglat = rowSums(
-      select(., all_of(list_items_ailit$ailit_glat)),
-      na.rm = TRUE
-    ),
+    AILITglat = GL20_01,
     TK = rowMeans(select(., all_of(list_items_i_tpack$TK)), na.rm = TRUE),
     TPK = rowMeans(select(., all_of(list_items_i_tpack$TPK)), na.rm = TRUE),
     TCK = rowMeans(select(., all_of(list_items_i_tpack$TCK)), na.rm = TRUE),
@@ -215,18 +340,78 @@ data <- data %>%
       select(., all_of(list_items_i_tpack$Ethics)),
       na.rm = TRUE
     ),
-    Ref = rowMeans(select(., all_of(list_items_ref$Ref)), na.rm = TRUE),
     TPACK_total = rowMeans(
       select(., all_of(unlist(list_items_i_tpack))),
       na.rm = TRUE
-    )
+    ),
+    CEA = rowMeans(select(., all_of(list_items_cea$CEA)), na.rm = TRUE),
+    CEA_understanding = rowMeans(
+      select(., all_of(list_items_cea$CEA_understanding)),
+      na.rm = TRUE
+    ),
+    CEA_ped = rowMeans(select(., all_of(list_items_cea$CEA_ped)), na.rm = TRUE),
+    PU = rowMeans(select(., all_of(list_items_pu$Pu)), na.rm = TRUE),
+    PU1 = ED03_01,
+    PU2 = ED03_02,
+    PU3 = ED03_03,
+    PU4 = ED03_04
   )
 
-# check missing values in TPACK and PU scales (NA means, not answered (-1 diff. answer, -9 not answered))
-data %>%
+# check missing values in TPACK and PU scales (NA means, not answered (-1 diff. answer, -9 not answered)) -> this comes from ethic items
+data_merged %>%
   select(all_of(c(list_items_i_tpack) %>% unlist)) %>%
   summarise(across(everything(), ~ sum(is.na(.x)))) %>%
   sum # 0
+
+```
+
+```{r reshape data}
+
+data_merged_long <- data_merged %>%
+  pivot_longer(
+    cols = all_of(outcomes),
+    names_to = "outcome",
+    values_to = "score"
+  ) %>%
+  mutate(
+    outcome = factor(outcome, levels = outcomes)
+  )
+
+```
+
+```{r descriptive-plots}
+# TPACK
+p_tpack <- plot_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(T)")),
+  scales_facet = "fixed"
+) +
+  ggtitle("Intelligent-TPACK")
+
+ggsave(
+  p_tpack + facet_wrap(~outcome, ncol = 3),
+  file = "figures/plot-tpack.pdf",
+  width = 8,
+  height = 10,
+  device = cairo_pdf
+)
+
+# AILIT
+p_ailit <- plot_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(AILIT)"))
+) +
+  ggtitle("AI Literacy")
+
+# Critical Evaluation of AI
+p_cea <- plot_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(CEA)"))
+) +
+  ggtitle("Critical Evaluation of AI (CEA)")
+
+p_pu <- plot_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(PU)")),
+  scales_facet = "fixed"
+) +
+  ggtitle("Perceived Usefulness")
 
 ```
 
@@ -237,7 +422,7 @@ data %>%
 ```{r participants, cache=F}
 p_load(dplyr, tidyr) # needs to be called for rendering to work
 
-data_participants <- data %>%
+data_participants <- data_merged %>%
   filter(time == "pre") %>%
   group_by(intervention, location, gender) %>%
   summarise(
@@ -253,6 +438,42 @@ data_participants <- data %>%
     semester_sd = sd(semester, na.rm = T) %>% round(2),
     .groups = "drop"
   )
+
+data_participants_25 <- data_merged %>%
+  filter(time == "pre", wave == "sose25") %>%
+  group_by(intervention, location, gender) %>%
+  summarise(
+    n = n(),
+    n_complete = sum(complete.cases(.)),
+    age_min = min(age, na.rm = T),
+    age_max = max(age, na.rm = T),
+    age_mean = mean(age, na.rm = T) %>% round(2),
+    age_sd = sd(age, na.rm = T) %>% round(2),
+    semester_min = min(semester, na.rm = T),
+    semester_max = max(semester, na.rm = T),
+    semester_mean = mean(semester, na.rm = T) %>% round(2),
+    semester_sd = sd(semester, na.rm = T) %>% round(2),
+    .groups = "drop"
+  )
+
+data_participants_26 <- data_merged %>%
+  filter(time == "pre", wave == "wise26") %>%
+  group_by(intervention, location, gender) %>%
+  summarise(
+    n = n(),
+    n_complete = sum(complete.cases(.)),
+    age_min = min(age, na.rm = T),
+    age_max = max(age, na.rm = T),
+    age_mean = mean(age, na.rm = T) %>% round(2),
+    age_sd = sd(age, na.rm = T) %>% round(2),
+    semester_min = min(semester, na.rm = T),
+    semester_max = max(semester, na.rm = T),
+    semester_mean = mean(semester, na.rm = T) %>% round(2),
+    semester_sd = sd(semester, na.rm = T) %>% round(2),
+    .groups = "drop"
+  )
+
+
 ```
 
 The study involved pre-service teachers from two universities of education in Baden-Württemberg, Germany. Participants were divided into a **treatment group** consisting of two intervention groups (STEM and language course), and a **control group**.
@@ -291,9 +512,38 @@ var_names <- list(
   TPACK_total = "Intelligent TPACK",
   AILIT = "AI Literacy",
   Ethics = "AI Ethics",
-  Ref = "Reflection"
+  CEA = "Critical Evaluation of AI",
+  PU = "Perceived Usefulness"
 )
-
+# total
+kable(
+  summary(
+    tableby(
+      intervention ~
+        location +
+        age +
+        gender +
+        semester +
+        students,
+      data_merged %>%
+        filter(time == "pre") %>%
+        mutate(
+          students = factor(students, labels = c("Bachelor", "Master"))
+        ) %>%
+        droplevels(),
+      cat.test = "chisq",
+      chisq.correct = T,
+      control = tableby.control(test = T, total = T, digits = 2)
+    ),
+    labelTranslations = var_names,
+    pfootnote = T,
+    text = F
+  ),
+  escape = T,
+  format = format,
+  booktabs = T
+)
+# 25
 kable(
   summary(
     tableby(
@@ -309,9 +559,44 @@ kable(
         TPACK_total +
         Ethics +
         AILIT +
-        Ref,
-      data %>%
-        filter(time == "pre") %>%
+        PU,
+      data_merged %>%
+        filter(time == "pre", wave == "sose25") %>%
+        mutate(
+          students = factor(students, labels = c("Bachelor", "Master"))
+        ) %>%
+        droplevels(),
+      cat.test = "chisq",
+      chisq.correct = T,
+      control = tableby.control(test = T, total = T, digits = 2)
+    ),
+    labelTranslations = var_names,
+    pfootnote = T,
+    text = F
+  ),
+  escape = T,
+  format = format,
+  booktabs = T
+)
+# 26
+kable(
+  summary(
+    tableby(
+      intervention ~
+        location +
+        age +
+        gender +
+        semester +
+        students +
+        TK +
+        TCK +
+        TPK +
+        TPACK_total +
+        Ethics +
+        AILIT +
+        CEA,
+      data_merged %>%
+        filter(time == "pre", wave == "wise26") %>%
         mutate(
           students = factor(students, labels = c("Bachelor", "Master"))
         ) %>%
@@ -344,9 +629,9 @@ The translation and validation of the Intelligent-TPACK is reported in detail in
 
 ### Data Preparation and Cleaning (needs to be done after data gets merged)
 
-```{r}
+```{r dropouts}
 # get participants who only participated in pre or post test
-data_dropouts <- data_all %>%
+data_dropouts <- data_all_merged %>%
   group_by(code) %>%
   summarise(
     has_pre = any(time == "pre"),
@@ -403,32 +688,9 @@ The raw data and *R* scripts detailing the analyses can be accessed in the onlin
 ### Statistical Software
 All analyses were conducted in *R* [@R2024]. Data were prepared using *dplyr* [wickham2023:dplyr], *tidyr* [@wickham2024], and *gtools* [@warnes2023]. Tables were created with *arsenal* [@heinzen2021], *vtable* [@huntington2023], *modelsummary* [@arel-bundock2022], and *kableExtra* [@zhu2024]. Figures were produced using *ggplot2* [@wickham2016], *ggsci* [@xiao2024], and *jtools* [@long2022]. The ANCOVA models were estimated using *lm_robust* from the *estimatr* package [@blair2025]. To compute heteroscedasticity-consistent (HC) standard errors, we specified the HC3 estimator, as recommended for small samples [@long2000]. Where applicable, pairwise comparisons were obtained with *emmeans* [@lenth2025].
 
-```{r analysis-setup}
-#define vars
-controls <- c("gender", "semester", "location")
-random_terms_lmer <- c("(1 | code)")
-groups <- c("intervention")
-time <- "time"
-outcomes <- c(
-  "AILIT",
-  "AILIThorn",
-  "AILITglat",
-  "TK",
-  "TPK",
-  "TCK",
-  "TPACKce",
-  "TPACKgenai",
-  "Ethics",
-  "Ref"
-)
-vars_num <- c("age", "semester") # numeric outcomes
-vars_cat <- c("gender", "students") # categorical outcomes`
-```
-
-
 ```{r ancova}
 # reshape data to wide format for ancova
-data_wide <- data %>%
+data_wide <- data_merged %>%
   pivot_wider(
     id_cols = c(
       code,
@@ -479,68 +741,125 @@ names(ancovas_two_groups) <- outcomes
 
 ```
 
+## AI Literacy
 
-## Effect Sizes
+```{r fig-ai-lit, echo=FALSE, fig.cap="Descriptive Statistics of Students' AI Literacy Scores Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
+ailit_n_labels <- data_merged_long %>%
+  filter(outcome %in% outcomes_ailit) %>%
+  filter(!is.na(score)) %>%
+  group_by(outcome) %>%
+  summarise(n = n_distinct(code), .groups = "drop")
 
-```{r effect-sizes}
-# #| eval: false
-# lmers_prepost_all <-
-#   lapply(
-#     outcomes,
-#     fit_lmer,
-#     groups,
-#     time,
-#     controls,
-#     random_terms_lmer,
-#     NULL,
-#     data = data
-#   )
+plot_outcome(
+  data_merged_long %>%
+    filter(outcome %in% outcomes_ailit) %>%
+    mutate(
+      outcome = factor(
+        outcome,
+        levels = outcomes_ailit,
+        labels = c(
+          "AI Literacy - Full Scale incl. 25",
+          "AI Literacy - Full Scale 26",
+          "AI Literacy - Study-Specific",
+          "AI Literacy - GLAT"
+        )
+      )
+    ),
+  ylab = "Score"
+) +
+  geom_text(
+    data = n_labels %>%
+      mutate(
+        outcome = factor(
+          outcome,
+          levels = outcomes_ailit,
+          labels = c(
+            "AI Literacy - Full Scale incl. 25",
+            "AI Literacy - Full Scale 26",
+            "AI Literacy - Study-Specific",
+            "AI Literacy - GLAT"
+          )
+        )
+      ),
+    aes(x = 1.5, y = Inf, label = paste0("n = ", n)),
+    inherit.aes = FALSE,
+    vjust = 1.5
+  ) +
+  ggtitle("AI Literacy") +
+  theme(legend.position = "bottom")
 
-# dhat <- function(model, idx = 3, type = 2) {
-#   f <- abs(tail(summary(model)$coefficients, idx))[1]
-#   v <- sqrt(tail(anova(model, type = type)[["Mean Sq"]], 1))
-#   return(f / v)
-# }
-# #' Compute standardized effect size d for one fixed effect in an lmer model, based on https://pmc.ncbi.nlm.nih.gov/articles/PMC6646942/
-# #'
-# #' d = estimate / sqrt(sum of variances of random effects [+ residual if chosen])
-# #'
-# #' @param model lmer model
-# #' @param effect character, name of the fixed effect in fixef(model)
-# #' @param include_residual logical, include residual variance (default TRUE)
-# #' @return numeric, effect size d
-# lmer_d <- function(model, effect, include_residual = TRUE) {
-#   stopifnot(effect %in% names(lme4::fixef(model)))
+#p_ailit %+% + facet_wrap(~outcome, ncol =2, scales="free")  + labs(y = "Score")  + theme(legend.position = "bottom")
 
-#   # numerator
-#   est <- unname(lme4::fixef(model)[effect])
+```
 
-#   # variance components
-#   vc <- as.data.frame(lme4::VarCorr(model)) # grp, var1, var2, vcov, sdcor
-#   var_random <- sum(vc$vcov, na.rm = TRUE)
+```{r tab.layout = "autofit"}
+#| label: tbl-ancova-ailit-summary
+#| tbl-cap: "Summary of Multiple Regression Models for AI Literacy."
 
-#   # residual
-#   if (!include_residual) {
-#     var_random <- var_random - sigma(model)^2
-#   }
+ft_ailit_ancova <- modelsummary_models(
+  ancovas[names(ancovas) %in% outcomes_ailit],
+  outcomes = outcomes_ailit,
+  output = modelsummary_output
+) # %>%   kableExtra::scroll_box(width = "100%")
 
-#   d <- est / sqrt(var_random)
-#   return(d)
-# }
+if (is_word) {
+  ft_ailit_ancova <- adjust_table_for_word(ft_ailit_ancova, width = .75)
+}
+ft_ailit_ancova
+```
 
-# effect_sizes_dhat_old <- sapply(lmers_prepost_all, dhat, idx = 2) %>% round(2)
 
-# effect_sizes <- sapply(
-#   lmers_prepost_all,
-#   lmer_d,
-#   "intervention-c+STEM_language:time-pre+post"
-# ) %>%
-#   round(2)
-# effect_sizes
+```{r, results="asis"}
+if (!is_word) {
+  cat("### Pairwise Contrasts Between Groups")
+}
+```
+
+```{r ailit-ancova-between-contrasts}
+# pairwise between contrasts (no multiplicity adjustment)
+ailit_ancova_between_contrasts <- lapply(ancovas[1:3], function(m) {
+  emmeans(m, ~intervention) %>%
+    contrast(interaction = "pairwise", adjust = "none")
+})
+if (!is_word) {
+  print(ailit_ancova_between_contrasts)
+}
 ```
 
 
 ## Intelligent TPACK and AI Ethics
+
+```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
+
+n_tpack <- data_merged_long %>%
+  filter(outcome %in% outcomes_tpack) %>%
+  filter(!is.na(score)) %>%
+  summarise(n = n_distinct(code)) %>%
+  pull(n)
+
+p_tpack +
+  facet_wrap(
+    ~outcome,
+    scales = "fixed",
+    ncol = 3,
+    labeller = labeller(
+      outcome = c(
+        TK = "Intelligent TK",
+        TCK = "Intelligent TCK",
+        TPK = "Intelligent TPK",
+        TPACKce = "Intelligent TPACK - Core",
+        TPACKgenai = "iTPACK - Generative AI",
+        Ethics = "AI Ethics"
+      )
+    )
+  ) +
+  labs(
+    title = "Intelligent TPACK and AI Ethics",
+    subtitle = paste0("N = ", n_tpack)
+  ) +
+  theme(legend.position = "bottom")
+```
+
 
 ::: {.landscape}
 ```{r tab.layout="autofit"}
@@ -561,83 +880,100 @@ ft_ancova
 
 :::
 
-## AI Literacy
+## Critical Evaluation of AI (CEA)
+Note für uns: ggf. reduzieren wir CEA auf eine Skala mit 9 Items. Im Piloten haben wir 15 items getestet und EFA hat gezeigt, dass Reduktion auf 2 Skalen möglich wäre. Das haben wir gemacht, und die funktionieren auch, aber ein Item lädt z.B. ziemlich stark auf die andere Skala. Entweder bekommt man das gut begründet, aber den richtigen Mehrwert sehe ich nicht, 2 Skalen aufzustellen. So oder so, es haben alle Skalen gut funktioniert und zeigen den Mehrwert vom Seminar.
 
-```{r tab.layout = "autofit"}
-#| label: tbl-ancova-ailit-summary
-#| tbl-cap: "Summary of Multiple Regression Models for AI Literacy."
+```{r fig-cea, echo=FALSE, fig.cap="Descriptive Statistics of Students' Critical Evaluation of AI Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
 
-ft_ailit_ancova <- modelsummary_models(
-  ancovas[names(ancovas) %in% c("AILIT", "AILIThorn", "AILITglat")],
-  outcomes = c("AILIT", "AILIThorn", "AILITglat"),
-  output = modelsummary_output,
-) # %>%   kableExtra::scroll_box(width = "100%")
+n_cea <- data_merged_long %>%
+  filter(outcome %in% "CEA") %>%
+  filter(!is.na(score)) %>%
+  summarise(n = n_distinct(code)) %>%
+  pull(n)
 
-if (is_word) {
-  ft_ailit_ancova <- adjust_table_for_word(ft_ailit_ancova, width = .75)
-}
-ft_ailit_ancova
+p_cea +
+  facet_wrap(
+    ~outcome,
+    scales = "fixed",
+    ncol = 2,
+    labeller = labeller(
+      outcome = c(
+        CEA = "Critical Evaluation of AI (CEA) - Full Scale",
+        CEA_understanding = "Critical Understanding of AI",
+        CEA_ped = "Pedagogical Evaluation of AI Output"
+      )
+    )
+  ) +
+  labs(
+    title = "Critical Evaluation of AI (CEA)",
+    subtitle = paste0("N = ", n_cea)
+  ) +
+  theme(legend.position = "bottom")
 ```
-
-## Critical Reflection
 
 ::: {.landscape}
 ```{r tab.layout="autofit"}
-#| label: tbl-ancova-ref-summary
-#| tbl-cap: "Summary of Multiple Regression Models for Reflection subscale."
+#| label: tbl-ancova-CEA-summary
+#| tbl-cap: "Summary of Multiple Regression Models for CEA subscale."
 
-ft_ailit_ancova <- modelsummary_models(
-  ancovas[names(ancovas) %in% c("Ref")],
-  outcomes = c("Ref"),
+ft_cea_ancova <- modelsummary_models(
+  ancovas[grepl("^(CEA)", names(ancovas))],
+  outcomes = c("CEA", "CEA_understanding", "CEA_ped"),
   output = modelsummary_output,
 ) # %>%   kableExtra::scroll_box(width = "100%")
 
 if (is_word) {
-  ft_ailit_ancova <- adjust_table_for_word(ft_ailit_ancova, width = .75)
+  ft_cea_ancova <- adjust_table_for_word(ft_cea_ancova, width = .75)
 }
-ft_ailit_ancova
+ft_cea_ancova
 ```
 
 :::
 
-```{r, results="asis"}
-if (!is_word) {
-  cat("### Pairwise Contrasts Between Groups")
-}
+``` {r Exploring CEA data}
+# cronbach alpha
+alphas <- imap(
+  list_items_cea,
+  ~ psych::alpha(dplyr::select(data_pre, dplyr::all_of(.x)), warnings = FALSE)
+)
+alphas
+# 0.86 alpha, kein item lohnt sich rauszunehmen
+
+data_post <- data %>% filter(time == "post" & CEA != "NaN")
+# EFA
+ncomp <- 2
+# EFA
+df_cea_items <- data_post %>%
+  select(all_of(list_items_cea$CEA)) %>%
+  na.omit()
+cea_scale <- list_items_cea %>% unlist(use.names = F)
+
+efa_promax <- df_cea_items %>%
+  select(any_of(cea_scale)) %>%
+  psych::fa(nfactors = ncomp, rotate = "varimax", fm = "ml", missing = T)
+
+# print(efa_promax, digits = 2, cut = .3, sort = F)
+fa.diagram(efa_promax, digits = 2, cut = .30, simple = FALSE)
+
+## Computing EFA using the lavaan package
+cea_efa <- lavaan::efa(
+  df_cea_items %>%
+    select(any_of(cea_scale)),
+  nfactors = ncomp,
+  rotation = "varimax",
+  ordered = F,
+  std.lv = TRUE,
+  missing = "fiml"
+)
+
+summary(cea_efa, nd = 3L, cutoff = 0.3, dot.cutoff = 0.05)
+
 ```
 
-```{r ailit-ancova-between-contrasts}
-# pairwise between contrasts (no multiplicity adjustment)
-ailit_ancova_between_contrasts <- lapply(ancovas[1:3], function(m) {
-  emmeans(m, ~intervention) %>%
-    contrast(interaction = "pairwise", adjust = "none")
-})
-if (!is_word) {
-  print(ailit_ancova_between_contrasts)
-}
-```
+Results from efa and cronbachs alpha confirm our exploration and adjustments from pilot data. we have a good scale in CEA.
+
 
 ## Two Groups (Control vs. Intervention)
-
-::: {.callout-note}
-Due to the very small (insignificant) difference between the distribution of gender in the treatment groups, we could drop it from the covariates.
-
-:::
-
-```{r effectsizes-covariates-two-groups}
-# #| eval: false
-# # perform chi square for categorical variables
-# chisquare_covariates_two_groups <- vars_cat %>%
-#   lapply(function(v) {
-#     tab <- table(d[[v]], d$treatment)
-#     chisq <- chisq.test(tab)
-#   })
-# names(chisquare_covariates_two_groups) <- vars_cat
-
-# chisquare_covariates_two_groups
-
-# effectsizes_covariates__two_groups %>% kable
-```
 
 ```{r ancova-two-groups}
 #| label: tbl-ancova-two-groups
