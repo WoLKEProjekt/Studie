@@ -503,6 +503,7 @@ var_names <- list(
   age = "Age",
   semester = "Semester Number",
   students = "Study Level",
+  group = "Gruppe",
   isp = "Completed Integrated Semester Internship",
   subject1 = "Subject 1",
   subject2 = "Subject 2",
@@ -526,7 +527,8 @@ kable(
         age +
         gender +
         semester +
-        students,
+        students +
+        group,
       data_merged %>%
         filter(time == "pre") %>%
         mutate(
@@ -555,6 +557,7 @@ kable(
         gender +
         semester +
         students +
+        group +
         TK +
         TCK +
         TPK +
@@ -590,6 +593,7 @@ kable(
         gender +
         semester +
         students +
+        group +
         TK +
         TCK +
         TPK +
