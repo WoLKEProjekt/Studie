@@ -138,6 +138,8 @@ outcomes <- c(
   "TPACKgenai",
   "Ethics",
   "CEA",
+  "CEA_understanding",
+  "CEA_ped",
   "PU"
 )
 outcomes_ailit <- c("AILIT", "AILIT26", "AILITwolke", "AILITglat")
@@ -768,7 +770,7 @@ plot_outcome(
   ylab = "Score"
 ) +
   geom_text(
-    data = n_labels %>%
+    data = ailit_n_labels %>%
       mutate(
         outcome = factor(
           outcome,
@@ -934,16 +936,19 @@ ft_cea_ancova
 # cronbach alpha
 alphas <- imap(
   list_items_cea,
-  ~ psych::alpha(dplyr::select(data_pre, dplyr::all_of(.x)), warnings = FALSE)
+  ~ psych::alpha(
+    dplyr::select(data_merged_pre, dplyr::all_of(.x)),
+    warnings = FALSE
+  )
 )
 alphas
 # 0.86 alpha, kein item lohnt sich rauszunehmen
 
-data_post <- data %>% filter(time == "post" & CEA != "NaN")
+data_merged_post <- data_merged %>% filter(time == "post" & CEA != "NaN")
 # EFA
 ncomp <- 2
 # EFA
-df_cea_items <- data_post %>%
+df_cea_items <- data_merged_post %>%
   select(all_of(list_items_cea$CEA)) %>%
   na.omit()
 cea_scale <- list_items_cea %>% unlist(use.names = F)
