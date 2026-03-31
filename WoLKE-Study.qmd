@@ -389,13 +389,52 @@ p_tpack <- plot_outcome(
 ) +
   ggtitle("Intelligent-TPACK")
 
-ggsave(
-  p_tpack + facet_wrap(~outcome, ncol = 3),
-  file = "figures/plot-tpack.pdf",
-  width = 8,
-  height = 10,
-  device = cairo_pdf
-)
+# ggplot(df, aes(x = time, y = score, color = group)) +
+#   geom_jitter(width = 0.08, alpha = 0.2) +
+#   stat_summary(aes(group = group), fun = mean, geom = "line", linewidth = 1) +
+#   stat_summary(aes(group = group), fun = mean, geom = "point", size = 3) +
+#   facet_wrap(~ subscale)
+
+data_merged_long %>%
+  filter(str_detect(outcome, "^(T)")) %>%
+  ggplot(aes(x = time, y = score, color = intervention, fill = intervention)) +
+  geom_jitter(
+    position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.3),
+    alpha = 0.3
+  ) +
+  geom_boxplot(
+    width = 0.2,
+    outlier.shape = NA,
+    alpha = 0.05,
+    notch = TRUE,
+    position = position_dodge(width = 0.3)
+  ) +
+  stat_summary(
+    aes(group = intervention),
+    fun = mean,
+    geom = "point",
+    shape = 23,
+    size = 3,
+    color = "black",
+    position = position_dodge(width = 0.3)
+  ) +
+  facet_wrap(~outcome) +
+  labs(
+    x = "Messzeitpunkt",
+    y = "Skalenwert",
+    color = "Gruppe",
+    fill = "Gruppe",
+    title = "Intelligent-TPACK Subscales Over Time by Group"
+  ) +
+  theme_bw()
+
+# ggsave(
+#   p_tpack + facet_wrap(~outcome, ncol = 3),
+#   file = "figures/plot-tpack.pdf",
+#   width = 8,
+#   height = 10,
+#   device = cairo_pdf
+# )
 
 # AILIT
 p_ailit <- plot_outcome(
