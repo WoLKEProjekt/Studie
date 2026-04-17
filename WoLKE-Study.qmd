@@ -834,6 +834,15 @@ ailit_n_labels <- data_merged_long %>%
   group_by(outcome) %>%
   summarise(n = n_distinct(code), .groups = "drop")
 
+# Note: fig-ai-lit uses data_merged_long (raw individual data from library merging)
+# Labels may differ slightly from processed AILIT scales (e.g., "Study-Specific" vs "Study Specific")
+ailit_fig_labels <- c(
+  "AI Literacy - Full Scale incl. 25",
+  "AI Literacy - Full Scale 26",
+  "AI Literacy - Study-Specific",
+  "AI Literacy - GLAT"
+)
+
 plot_outcome(
   data_merged_long %>%
     filter(outcome %in% outcomes_ailit) %>%
@@ -841,12 +850,7 @@ plot_outcome(
       outcome = factor(
         outcome,
         levels = outcomes_ailit,
-        labels = c(
-          "AI Literacy - Full Scale incl. 25",
-          "AI Literacy - Full Scale 26",
-          "AI Literacy - Study-Specific",
-          "AI Literacy - GLAT"
-        )
+        labels = ailit_fig_labels
       )
     ),
   ylab = "Score"
@@ -857,12 +861,7 @@ plot_outcome(
         outcome = factor(
           outcome,
           levels = outcomes_ailit,
-          labels = c(
-            "AI Literacy - Full Scale incl. 25",
-            "AI Literacy - Full Scale 26",
-            "AI Literacy - Study-Specific",
-            "AI Literacy - GLAT"
-          )
+          labels = ailit_fig_labels
         )
       ),
     aes(x = 1.5, y = Inf, label = paste0("n = ", n)),
@@ -890,6 +889,92 @@ if (is_word) {
 ft_ailit_ancova
 ```
 
+
+```{r}
+######################## predict, aggregate, transform to long, and plot
+
+scales_ailit <- c("AILIT", "AILIT26", "AILITwolke", "AILITglat")
+
+# Define outcome scale labels
+ailit_labels <- c(
+  AILIT = "AI Literacy - Full Scale incl. 25",
+  AILIT26 = "AI Literacy - Full Scale 26",
+  AILITwolke = "AI Literacy - Study Specific",
+  AILITglat = "AI Literacy - GLAT"
+)
+
+# Step 1: Compute adjusted posttest predictions for all scales in one go
+for (scale in scales_ailit) {
+  pre_var <- paste0(scale, "_pre")
+  adj_var <- paste0(scale, "_adj_post")
+
+  data_wide_unscaled[[adj_var]] <- predict(
+    ancovas_unscaled[[scale]],
+    data.frame(
+      intervention = data_wide_unscaled$intervention,
+      pretest = mean(data_wide_unscaled[[pre_var]], na.rm = TRUE),
+      gender = data_wide_unscaled$gender,
+      semester = data_wide_unscaled$semester
+    )
+  )
+}
+
+# Step 2: Aggregate means by intervention group
+data_ailit_agg <- data_wide_unscaled %>%
+  as.data.frame() %>%
+  group_by(intervention) %>%
+  summarise(
+    across(all_of(paste0(scales_ailit, "_adj_post")), ~ mean(., na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    !!!set_names(
+      map(
+        scales_ailit,
+        ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
+      ),
+      paste0(scales_ailit, "_mean_pre")
+    )
+  )
+
+# Step 3: Transform to long format with factors for plotting
+data_ailit_plot_long <- data_ailit_agg %>%
+  pivot_longer(
+    cols = -intervention,
+    names_to = "name",
+    values_to = "score"
+  ) %>%
+  mutate(
+    outcome = factor(
+      str_extract(name, "^[A-Za-z0-9]+"),
+      levels = scales_ailit,
+      labels = ailit_labels
+    ),
+    time = factor(
+      if_else(str_detect(name, "_mean_pre$"), "pre_mean", "post_adj"),
+      levels = c("pre_mean", "post_adj")
+    )
+  ) %>%
+  filter(!is.na(score)) %>%  # Explicitly remove any remaining NAs
+  select(intervention, outcome, time, score)
+
+# Step 4: plot using the new aggre function
+p_ailit_plot <- plot_outcome_agg(
+  data = data_ailit_plot_long,
+  groups = "intervention",
+  outcome_var = "outcome",
+  ylab = "Score",
+  scales_facet = "free_y",
+  ncol = 2
+  # y_limits = c(1, 5)
+) +
+  labs(
+    title = "AI Literacy Aggregated Data",
+    subtitle = "Pretest Mean and Adjusted Posttest Predictions"
+  )
+
+p_ailit_plot
+```
 
 ```{r, results="asis"}
 if (!is_word) {
@@ -942,7 +1027,6 @@ p_tpack +
 ```
 
 
-::: {.landscape}
 ```{r tab.layout="autofit"}
 #| label: tbl-ancova-tpack-summary
 #| tbl-cap: "Summary of Multiple Regression Models for Intelligent TPACK Subscales and AI Ethics"
@@ -1012,9 +1096,19 @@ comparison <- plot_df %>%
 print("Comparison of emmeans vs predict for TCK:")
 print(comparison)
 
-########################
+######################## predict, aggregate, transform to long, and plot
 
 scales_tpack <- c("TK", "TPK", "TCK", "TPACKce", "TPACKgenai", "Ethics")
+
+# Define outcome scale labels
+tpack_labels <- c(
+  TK = "Intelligent TK",
+  TPK = "Intelligent TPK",
+  TCK = "Intelligent TCK",
+  TPACKce = "Intelligent TPACK - Core",
+  TPACKgenai = "iTPACK - Generative AI",
+  Ethics = "AI Ethics"
+)
 
 # Step 1: Compute adjusted posttest predictions for all scales in one go
 for (scale in scales_tpack) {
@@ -1032,8 +1126,8 @@ for (scale in scales_tpack) {
   )
 }
 
-# Aggregate and transform to long format in one pipeline
-data_tpack_plot_long <- data_wide_unscaled %>%
+# Step 2: Aggregate means by intervention group
+data_tpack_agg <- data_wide_unscaled %>%
   as.data.frame() %>%
   group_by(intervention) %>%
   summarise(
@@ -1048,7 +1142,10 @@ data_tpack_plot_long <- data_wide_unscaled %>%
       ),
       paste0(scales_tpack, "_mean_pre")
     )
-  ) %>%
+  )
+
+# Step 3: Transform to long format with factors for plotting
+data_tpack_plot_long <- data_tpack_agg %>%
   pivot_longer(
     cols = -intervention,
     names_to = "name",
@@ -1058,14 +1155,7 @@ data_tpack_plot_long <- data_wide_unscaled %>%
     outcome = factor(
       str_extract(name, "^[A-Za-z]+"),
       levels = scales_tpack,
-      labels = c(
-        "Intelligent TK",
-        "Intelligent TPK",
-        "Intelligent TCK",
-        "Intelligent TPACK - Core",
-        "iTPACK - Generative AI",
-        "AI Ethics"
-      )
+      labels = tpack_labels
     ),
     time = factor(
       if_else(str_detect(name, "_mean_pre$"), "pre_mean", "post_adj"),
@@ -1074,113 +1164,7 @@ data_tpack_plot_long <- data_wide_unscaled %>%
   ) %>%
   select(intervention, outcome, time, score)
 
-# Non-aggregated version keeping all subject data
-# Calculate overall mean pretest for each scale
-pretest_means <- map_df(
-  scales_tpack,
-  ~ data.frame(
-    outcome = factor(
-      .x,
-      levels = scales_tpack,
-      labels = c(
-        "Intelligent TK",
-        "Intelligent TPK",
-        "Intelligent TCK",
-        "Intelligent TPACK - Core",
-        "iTPACK - Generative AI",
-        "AI Ethics"
-      )
-    ),
-    pretest_mean = mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
-  )
-)
-
-data_tpack_plot_long_individual <- data_wide_unscaled %>%
-  as.data.frame() %>%
-  select(
-    code,
-    intervention,
-    all_of(c(
-      paste0(scales_tpack, "_pre"),
-      paste0(scales_tpack, "_adj_post")
-    ))
-  ) %>%
-  pivot_longer(
-    cols = -c(code, intervention),
-    names_to = "name",
-    values_to = "score"
-  ) %>%
-  mutate(
-    outcome = factor(
-      str_extract(name, "^[A-Za-z]+"),
-      levels = scales_tpack,
-      labels = c(
-        "Intelligent TK",
-        "Intelligent TPK",
-        "Intelligent TCK",
-        "Intelligent TPACK - Core",
-        "iTPACK - Generative AI",
-        "AI Ethics"
-      )
-    ),
-    time = factor(
-      if_else(str_detect(name, "_pre$"), "pre_mean", "post_adj"),
-      levels = c("pre_mean", "post_adj")
-    )
-  ) %>%
-  left_join(pretest_means, by = "outcome") %>%
-  mutate(
-    score = if_else(time == "pre_mean", pretest_mean, score)
-  ) %>%
-  select(code, intervention, outcome, time, score)
-
-
-# TPACK plot using the old plot function
-p_tpack_adj <- plot_outcome(
-  data_tpack_plot_long_individual %>%
-    filter(str_detect(as.character(outcome), "^(Intelligent|AI|iTPACK)")) %>%
-    mutate(
-      outcome = factor(
-        outcome,
-        levels = c(
-          "Intelligent TK",
-          "Intelligent TPK",
-          "Intelligent TCK",
-          "Intelligent TPACK - Core",
-          "iTPACK - Generative AI",
-          "AI Ethics"
-        )
-      )
-    ),
-  scales_facet = "fixed",
-  y_limits = c(1, 5)
-) +
-  ggtitle("Intelligent-TPACK")
-
-p_tpack_adj +
-  facet_wrap(
-    ~outcome,
-    scales = "fixed",
-    ncol = 3,
-    labeller = labeller(
-      outcome = c(
-        TK = "Intelligent TK",
-        TPK = "Intelligent TPK",
-        TCK = "Intelligent TCK",
-        TPACKce = "Intelligent TPACK - Core",
-        TPACKgenai = "iTPACK - Generative AI",
-        Ethics = "AI Ethics"
-      )
-    )
-  ) +
-  labs(
-    title = "Intelligent TPACK and AI Ethics Individual Data",
-    subtitle = paste0("N = ", n_tpack)
-  ) +
-  theme(legend.position = "bottom")
-
-
-# plot using the new aggre function
+# Step 4: plot using the new aggre function
 p_tpack_plot <- plot_outcome_agg(
   data = data_tpack_plot_long,
   groups = "intervention",
@@ -1198,7 +1182,79 @@ p_tpack_plot <- plot_outcome_agg(
 p_tpack_plot
 ```
 
-:::
+```{r}
+# Non-aggregated version keeping all subject data
+# Calculate pretest mean for each scale
+pretest_means <- tibble(
+  scale = scales_tpack,
+  pretest_mean = map_dbl(
+    scales_tpack,
+    ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
+  )
+) %>%
+  mutate(
+    outcome = factor(scale, levels = scales_tpack, labels = tpack_labels)
+  ) %>%
+  select(outcome, pretest_mean)
+
+# Transform individual subject data to long format
+data_tpack_plot_long_individual <- data_wide_unscaled %>%
+  as.data.frame() %>%
+  select(
+    code,
+    intervention,
+    all_of(c(
+      paste0(scales_tpack, "_pre"),
+      paste0(scales_tpack, "_adj_post")
+    ))
+  ) %>%
+  pivot_longer(
+    cols = -c(code, intervention),
+    names_to = "name",
+    values_to = "score"
+  ) %>%
+  mutate(
+    scale = str_extract(name, "^[A-Za-z]+"),
+    outcome = factor(scale, levels = scales_tpack, labels = tpack_labels),
+    time = factor(
+      if_else(str_detect(name, "_pre$"), "pre_mean", "post_adj"),
+      levels = c("pre_mean", "post_adj")
+    )
+  ) %>%
+  left_join(pretest_means, by = "outcome") %>%
+  mutate(
+    score = if_else(time == "pre_mean", pretest_mean, score)
+  ) %>%
+  select(code, intervention, outcome, time, score)
+
+
+# TPACK plot using the old plot function
+p_tpack_adj <- plot_outcome(
+  data_tpack_plot_long_individual %>%
+    filter(str_detect(as.character(outcome), "^(Intelligent|AI|iTPACK)")) %>%
+    mutate(
+      outcome = factor(outcome, levels = tpack_labels)
+    ),
+  scales_facet = "fixed",
+  y_limits = c(1, 5)
+) +
+  ggtitle("Intelligent-TPACK")
+
+p_tpack_adj +
+  facet_wrap(
+    ~outcome,
+    scales = "fixed",
+    ncol = 3,
+    labeller = labeller(
+      outcome = structure(names(tpack_labels), names = tpack_labels)
+    )
+  ) +
+  labs(
+    title = "Intelligent TPACK and AI Ethics Individual Data",
+    subtitle = paste0("N = ", n_tpack)
+  ) +
+  theme(legend.position = "bottom")
+```
 
 ## Critical Evaluation of AI (CEA)
 Note für uns: ggf. reduzieren wir CEA auf eine Skala mit 9 Items. Im Piloten haben wir 15 items getestet und EFA hat gezeigt, dass Reduktion auf 2 Skalen möglich wäre. Das haben wir gemacht, und die funktionieren auch, aber ein Item lädt z.B. ziemlich stark auf die andere Skala. Entweder bekommt man das gut begründet, aber den richtigen Mehrwert sehe ich nicht, 2 Skalen aufzustellen. So oder so, es haben alle Skalen gut funktioniert und zeigen den Mehrwert vom Seminar.
