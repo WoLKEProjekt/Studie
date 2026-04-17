@@ -146,13 +146,14 @@ plot_outcome <- function(
   data,
   groups = "intervention",
   ylab = "Rating",
-  scales_facet = "free"
+  scales_facet = "free",
+  y_limits = NULL
 ) {
   # set color scale/palette and plot theme
   wolke_color_scale <- scale_colour_manual(values = rev(pal_jco("default")(3)))
   wolke_theme <-
     jtools::theme_apa(
-      legend.pos = "bottomright",
+      legend.pos = "bottom",
       legend.use.title = T,
       facet.title.size = 12,
       x.font.size = 18,
@@ -184,6 +185,56 @@ plot_outcome <- function(
       shape = "Treatment Groups",
       linetype = "Treatment Groups"
     ) +
+    {if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL} +
+    wolke_color_scale +
+    wolke_theme
+}
+
+plot_outcome_agg <- function(
+  data,
+  groups = "intervention",
+  outcome_var = "outcome",
+  ylab = "Score",
+  scales_facet = "fixed",
+  ncol = 3,
+  y_limits = NULL
+) {
+  # set color scale/palette and plot theme (same as plot_outcome)
+  wolke_color_scale <- scale_colour_manual(values = rev(pal_jco("default")(3)))
+  wolke_theme <-
+    jtools::theme_apa(
+      legend.pos = "bottom",
+      legend.use.title = T,
+      facet.title.size = 12,
+      x.font.size = 18,
+      y.font.size = 18,
+      legend.font.size = 12
+    )
+
+  data %>%
+    ggplot(aes(
+      x = time,
+      y = score,
+      color = get(groups),
+      group = get(groups),
+      shape = get(groups),
+      linetype = get(groups)
+    )) +
+    geom_point(size = 2) +
+    geom_line(size = 0.5) +
+    facet_wrap(
+      as.formula(paste0("~", outcome_var)),
+      scales = scales_facet,
+      ncol = ncol
+    ) +
+    labs(
+      x = "Time",
+      y = ylab,
+      color = "Treatment Groups",
+      shape = "Treatment Groups",
+      linetype = "Treatment Groups"
+    ) +
+    {if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL} +
     wolke_color_scale +
     wolke_theme
 }

@@ -58,7 +58,6 @@ if (FALSE) {
 
 ```{r load-libraries-and-functions, cache=F}
 #| output: false
-
 # install pacman
 if (!requireNamespace("pacman", quietly = TRUE)) {
   install.packages("pacman")
@@ -99,13 +98,11 @@ source(file = "functions.r") # all outsourced funtions
 ```
 
 ```{r prepare-output}
-
 is_word <- !(knitr::is_html_output() | knitr::is_latex_output())
 
 if (is_word) {
   p_load(flextable)
 }
-
 ```
 
 ## Load Pre- and Posttest and Reshape Data
@@ -150,11 +147,11 @@ vars_cat <- c("gender", "students") # categorical outcomes`
 ```
 
 ```{r load and prepare data}
-
 # load pre-prepared data
 # 25
 load("data/25/25-data_all.Rdata") # nicht nach pre und posttest gefiltert
 load("data/25/25-data.Rdata") # probanden mit pre UND posttest
+
 # 26
 load("data/26/26-data_all.Rdata") # nicht nach pre und posttest gefiltert
 load("data/26/26-data.Rdata") # probanden mit pre UND posttest
@@ -189,6 +186,7 @@ data_merged <- bind_rows(
       across(c(starts_with(q_column_names), semester, age), as.integer)
     )
 )
+data_merged$gender <- droplevels(data_merged$gender)
 
 data_all_merged <- bind_rows(
   data_all_25 %>%
@@ -216,11 +214,9 @@ data_all_merged <- bind_rows(
 
 data_merged_pre <- data_merged %>% filter(time == "pre")
 data_all_merged_pre <- data_all_merged %>% filter(time == "pre")
-
 ```
 
 ```{r Prepare scales}
-
 ### grouping scales
 ## TPACK
 # all TPACK items used
@@ -364,11 +360,9 @@ data_merged %>%
   select(all_of(c(list_items_i_tpack) %>% unlist)) %>%
   summarise(across(everything(), ~ sum(is.na(.x)))) %>%
   sum # 0
-
 ```
 
 ```{r reshape data}
-
 data_merged_long <- data_merged %>%
   pivot_longer(
     cols = all_of(outcomes),
@@ -378,14 +372,14 @@ data_merged_long <- data_merged %>%
   mutate(
     outcome = factor(outcome, levels = outcomes)
   )
-
 ```
 
 ```{r descriptive-plots}
 # TPACK
 p_tpack <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(T)")),
-  scales_facet = "fixed"
+  data_merged_long %>% filter(str_detect(outcome, "^(T|Ethics)")),
+  scales_facet = "fixed",
+  y_limits = c(1, 5)
 ) +
   ggtitle("Intelligent-TPACK")
 
@@ -453,7 +447,6 @@ p_pu <- plot_outcome(
   scales_facet = "fixed"
 ) +
   ggtitle("Perceived Usefulness")
-
 ```
 
 # Methods
@@ -513,8 +506,6 @@ data_participants_26 <- data_merged %>%
     semester_sd = sd(semester, na.rm = T) %>% round(2),
     .groups = "drop"
   )
-
-
 ```
 
 The study involved pre-service teachers from two universities of education in Baden-Württemberg, Germany. Participants were divided into a **treatment group** consisting of two intervention groups (STEM and language course), and a **control group**.
@@ -662,7 +653,7 @@ kable(
 
 ## Materials
 
-### Translation Process (to be reworked)
+### Translation Process (todo Bene)
 The Intelligent-TPACK, originally developed by @celik2023, is widely used to assess teachers’ knowledge for pedagogical and ethical AI use based on the technological, pedagogical, and content knowledge (TPACK) framework.
 However, no empirically validated German translations of the Intelligent-TPACK exists. While some studies translate and use subsets of the Intelligent-TPACK [e.g., @mah.gross2024], there is no validated German version of the full instrument. 
 
@@ -672,7 +663,7 @@ For this, we applied the *Modified Direct Translation* that includes translators
 The translation and validation of the Intelligent-TPACK is reported in detail in @authorsinprep.
 
 
-### Data Preparation and Cleaning (needs to be done after data gets merged)
+### Data Preparation and Cleaning (todo Bene)
 
 ```{r dropouts}
 # get participants who only participated in pre or post test
@@ -759,9 +750,35 @@ data_wide <- data_merged %>%
     ))
   )
 
+data_wide_unscaled <- data_merged %>%
+  pivot_wider(
+    id_cols = c(
+      code,
+      intervention,
+      group,
+      gender,
+      semester,
+      students,
+      location
+    ),
+    names_from = time,
+    values_from = all_of(outcomes)
+  ) %>%
+  mutate(
+    treatment = factor(ifelse(
+      intervention == "control",
+      "control",
+      "intervention"
+    ))
+  )
+
 contrasts.treatment <- cbind(c(-1 / 2, 1 / 2))
 colnames(contrasts.treatment) <- c("-c+t")
 contrasts(data_wide$treatment) <- contrasts.treatment
+
+contrasts.gender <- cbind(c(-1 / 2, 1 / 2))
+colnames(contrasts.gender) <- c("-f+m")
+contrasts(data_wide$gender) <- contrasts.gender
 
 ancovas <- lapply(
   outcomes,
@@ -774,6 +791,17 @@ ancovas <- lapply(
 )
 names(ancovas) <- outcomes
 
+ancovas_unscaled <- lapply(
+  outcomes,
+  fit_ancova,
+  groups,
+  # we remove University as a covariate as we only have control students at University 2
+  setdiff(controls, "location"),
+  "HC3",
+  data_wide_unscaled
+)
+names(ancovas_unscaled) <- outcomes
+
 ancovas_two_groups <- lapply(
   outcomes,
   fit_ancova,
@@ -783,8 +811,19 @@ ancovas_two_groups <- lapply(
   data_wide
 )
 names(ancovas_two_groups) <- outcomes
-
 ```
+
+::: {.callout-note}
+Do we need to add location back into the ancova analysis?
+:::
+# Results (Todo Bene)
+
+Descriptive statistics of students' pretest scores are presented in [@tbl-participants].
+As expected, students attending the STEM course and students from the control group, which was recruited from pre-service STEM teachers, reported significantly higher ratings in all Intelligent TPACK subscales compared to students attending language course, which predominantly consisted of students not studying a STEM subject as their second subject. We didn't find significant differences between the intervention groups for AI literacy, AI ethics, and perceived usefulness at the pretest.
+
+The descriptive statistics of students' change in the outcome measures over time per treatment group are listed in  [@fig-ai-lit], [@fig-tpack], and [@fig-pu].
+
+For all outcome measure, we will first report the *main* treatment effect, i.e., the interaction between time and treatment group. Then, we will report the differences between treatment groups, i.e., control vs. intervention groups (STEM and language course), and then contrast the intervention groups, i.e., STEM vs. language course.
 
 ## AI Literacy
 
@@ -834,13 +873,11 @@ plot_outcome(
   theme(legend.position = "bottom")
 
 #p_ailit %+% + facet_wrap(~outcome, ncol =2, scales="free")  + labs(y = "Score")  + theme(legend.position = "bottom")
-
 ```
 
 ```{r tab.layout = "autofit"}
 #| label: tbl-ancova-ailit-summary
 #| tbl-cap: "Summary of Multiple Regression Models for AI Literacy."
-
 ft_ailit_ancova <- modelsummary_models(
   ancovas[names(ancovas) %in% outcomes_ailit],
   outcomes = outcomes_ailit,
@@ -875,7 +912,6 @@ if (!is_word) {
 ## Intelligent TPACK and AI Ethics
 
 ```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
-
 n_tpack <- data_merged_long %>%
   filter(outcome %in% outcomes_tpack) %>%
   filter(!is.na(score)) %>%
@@ -910,7 +946,6 @@ p_tpack +
 ```{r tab.layout="autofit"}
 #| label: tbl-ancova-tpack-summary
 #| tbl-cap: "Summary of Multiple Regression Models for Intelligent TPACK Subscales and AI Ethics"
-
 ft_ancova <- modelsummary_models(
   ancovas[grepl("^(T|Ethics)", names(ancovas))],
   outcomes = outcomes %>% grep("^(T|Ethics)", ., value = TRUE),
@@ -921,6 +956,246 @@ if (is_word) {
   ft_ancova <- adjust_table_for_word(ft_ancova, width = 1)
 }
 ft_ancova
+
+# summary(lm(TCK_post~intervention + scale(TCK_pre) + scale(semester) + gender, data=data_wide_unscaled)) #wenn man das hier mit dem emmeans vergleicht/addiert, warum ändern sich die werte? contrasts für gender müssen oben gesetzt sein
+
+# take model TCK and get the adjusted posttest means for each group with emmeans
+
+model <- ancovas_unscaled$TCK # lm_robust(scale(post) ~ interv + pre + sem + gender)
+model2 <- lm(
+  TCK_post ~ intervention + scale(TCK_pre) + scale(semester) + gender,
+  data = data_wide_unscaled
+)
+
+# ist das ein problem: averaged over levels of gender
+(emm <- emmeans(
+  model2, # model - egal kommts gleiche raus
+  ~intervention,
+  weights = "proportional" # since gender and #-control is not balanced or do we want to keep it default?
+))
+
+# get following data to save in a separate df and prepare for plot: group, emmeans value, pretest mean
+plot_df <- emm %>%
+  as.data.frame() %>%
+  transmute(
+    intervention,
+    adj_post = emmean,
+    pretest = mean(data_wide_unscaled$TCK_pre, na.rm = TRUE)
+  )
+
+# kontrolle wenn ich das händisch mit predict mache
+tck_pred <- predict(
+  ancovas_unscaled$TCK,
+  data.frame(
+    intervention = data_wide_unscaled$intervention,
+    pretest = mean(data_wide_unscaled$TCK_pre, na.rm = TRUE),
+    gender = data_wide_unscaled$gender,
+    semester = data_wide_unscaled$semester
+  )
+)
+
+# Aggregate predictions by intervention group to compare with emmeans
+tck_pred_agg <- data.frame(
+  intervention = data_wide_unscaled$intervention,
+  prediction = tck_pred
+) %>%
+  group_by(intervention) %>%
+  summarise(
+    predict_mean = mean(prediction, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Compare emmeans vs predict results
+comparison <- plot_df %>%
+  left_join(tck_pred_agg, by = "intervention")
+
+print("Comparison of emmeans vs predict for TCK:")
+print(comparison)
+
+########################
+
+scales_tpack <- c("TK", "TPK", "TCK", "TPACKce", "TPACKgenai", "Ethics")
+
+# Step 1: Compute adjusted posttest predictions for all scales in one go
+for (scale in scales_tpack) {
+  pre_var <- paste0(scale, "_pre")
+  adj_var <- paste0(scale, "_adj_post")
+
+  data_wide_unscaled[[adj_var]] <- predict(
+    ancovas_unscaled[[scale]],
+    data.frame(
+      intervention = data_wide_unscaled$intervention,
+      pretest = mean(data_wide_unscaled[[pre_var]], na.rm = TRUE),
+      gender = data_wide_unscaled$gender,
+      semester = data_wide_unscaled$semester
+    )
+  )
+}
+
+# Aggregate and transform to long format in one pipeline
+data_tpack_plot_long <- data_wide_unscaled %>%
+  as.data.frame() %>%
+  group_by(intervention) %>%
+  summarise(
+    across(all_of(paste0(scales_tpack, "_adj_post")), ~ mean(., na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    !!!set_names(
+      map(
+        scales_tpack,
+        ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
+      ),
+      paste0(scales_tpack, "_mean_pre")
+    )
+  ) %>%
+  pivot_longer(
+    cols = -intervention,
+    names_to = "name",
+    values_to = "score"
+  ) %>%
+  mutate(
+    outcome = factor(
+      str_extract(name, "^[A-Za-z]+"),
+      levels = scales_tpack,
+      labels = c(
+        "Intelligent TK",
+        "Intelligent TPK",
+        "Intelligent TCK",
+        "Intelligent TPACK - Core",
+        "iTPACK - Generative AI",
+        "AI Ethics"
+      )
+    ),
+    time = factor(
+      if_else(str_detect(name, "_mean_pre$"), "pre_mean", "post_adj"),
+      levels = c("pre_mean", "post_adj")
+    )
+  ) %>%
+  select(intervention, outcome, time, score)
+
+# Non-aggregated version keeping all subject data
+# Calculate overall mean pretest for each scale
+pretest_means <- map_df(
+  scales_tpack,
+  ~ data.frame(
+    outcome = factor(
+      .x,
+      levels = scales_tpack,
+      labels = c(
+        "Intelligent TK",
+        "Intelligent TPK",
+        "Intelligent TCK",
+        "Intelligent TPACK - Core",
+        "iTPACK - Generative AI",
+        "AI Ethics"
+      )
+    ),
+    pretest_mean = mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
+  )
+)
+
+data_tpack_plot_long_individual <- data_wide_unscaled %>%
+  as.data.frame() %>%
+  select(
+    code,
+    intervention,
+    all_of(c(
+      paste0(scales_tpack, "_pre"),
+      paste0(scales_tpack, "_adj_post")
+    ))
+  ) %>%
+  pivot_longer(
+    cols = -c(code, intervention),
+    names_to = "name",
+    values_to = "score"
+  ) %>%
+  mutate(
+    outcome = factor(
+      str_extract(name, "^[A-Za-z]+"),
+      levels = scales_tpack,
+      labels = c(
+        "Intelligent TK",
+        "Intelligent TPK",
+        "Intelligent TCK",
+        "Intelligent TPACK - Core",
+        "iTPACK - Generative AI",
+        "AI Ethics"
+      )
+    ),
+    time = factor(
+      if_else(str_detect(name, "_pre$"), "pre_mean", "post_adj"),
+      levels = c("pre_mean", "post_adj")
+    )
+  ) %>%
+  left_join(pretest_means, by = "outcome") %>%
+  mutate(
+    score = if_else(time == "pre_mean", pretest_mean, score)
+  ) %>%
+  select(code, intervention, outcome, time, score)
+
+
+# TPACK plot using the old plot function
+p_tpack_adj <- plot_outcome(
+  data_tpack_plot_long_individual %>%
+    filter(str_detect(as.character(outcome), "^(Intelligent|AI|iTPACK)")) %>%
+    mutate(
+      outcome = factor(
+        outcome,
+        levels = c(
+          "Intelligent TK",
+          "Intelligent TPK",
+          "Intelligent TCK",
+          "Intelligent TPACK - Core",
+          "iTPACK - Generative AI",
+          "AI Ethics"
+        )
+      )
+    ),
+  scales_facet = "fixed",
+  y_limits = c(1, 5)
+) +
+  ggtitle("Intelligent-TPACK")
+
+p_tpack_adj +
+  facet_wrap(
+    ~outcome,
+    scales = "fixed",
+    ncol = 3,
+    labeller = labeller(
+      outcome = c(
+        TK = "Intelligent TK",
+        TPK = "Intelligent TPK",
+        TCK = "Intelligent TCK",
+        TPACKce = "Intelligent TPACK - Core",
+        TPACKgenai = "iTPACK - Generative AI",
+        Ethics = "AI Ethics"
+      )
+    )
+  ) +
+  labs(
+    title = "Intelligent TPACK and AI Ethics Individual Data",
+    subtitle = paste0("N = ", n_tpack)
+  ) +
+  theme(legend.position = "bottom")
+
+
+# plot using the new aggre function
+p_tpack_plot <- plot_outcome_agg(
+  data = data_tpack_plot_long,
+  groups = "intervention",
+  outcome_var = "outcome",
+  ylab = "Rating",
+  scales_facet = "fixed",
+  ncol = 3,
+  y_limits = c(1, 5)
+) +
+  labs(
+    title = "Intelligent TPACK and AI Ethics Aggregated Data",
+    subtitle = "Pretest Mean and Adjusted Posttest Predictions"
+  )
+
+p_tpack_plot
 ```
 
 :::
@@ -929,7 +1204,6 @@ ft_ancova
 Note für uns: ggf. reduzieren wir CEA auf eine Skala mit 9 Items. Im Piloten haben wir 15 items getestet und EFA hat gezeigt, dass Reduktion auf 2 Skalen möglich wäre. Das haben wir gemacht, und die funktionieren auch, aber ein Item lädt z.B. ziemlich stark auf die andere Skala. Entweder bekommt man das gut begründet, aber den richtigen Mehrwert sehe ich nicht, 2 Skalen aufzustellen. So oder so, es haben alle Skalen gut funktioniert und zeigen den Mehrwert vom Seminar.
 
 ```{r fig-cea, echo=FALSE, fig.cap="Descriptive Statistics of Students' Critical Evaluation of AI Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
-
 n_cea <- data_merged_long %>%
   filter(outcome %in% "CEA") %>%
   filter(!is.na(score)) %>%
@@ -960,7 +1234,6 @@ p_cea +
 ```{r tab.layout="autofit"}
 #| label: tbl-ancova-CEA-summary
 #| tbl-cap: "Summary of Multiple Regression Models for CEA subscale."
-
 ft_cea_ancova <- modelsummary_models(
   ancovas[grepl("^(CEA)", names(ancovas))],
   outcomes = c("CEA", "CEA_understanding", "CEA_ped"),
@@ -1015,7 +1288,6 @@ cea_efa <- lavaan::efa(
 )
 
 summary(cea_efa, nd = 3L, cutoff = 0.3, dot.cutoff = 0.05)
-
 ```
 
 Results from efa and cronbachs alpha confirm our exploration and adjustments from pilot data. we have a good scale in CEA.
@@ -1026,13 +1298,11 @@ Results from efa and cronbachs alpha confirm our exploration and adjustments fro
 ```{r ancova-two-groups}
 #| label: tbl-ancova-two-groups
 #| tbl-cap: "Summary of Multiple Linear Regression Models for Two Treatment Groups."
-
 modelsummary_models(
   ancovas_two_groups,
   outcomes = outcomes,
   output = modelsummary_output
 )
-
 ```
 
 
