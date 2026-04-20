@@ -955,7 +955,7 @@ data_ailit_plot_long <- data_ailit_agg %>%
       levels = c("pre_mean", "post_adj")
     )
   ) %>%
-  filter(!is.na(score)) %>%  # Explicitly remove any remaining NAs
+  filter(!is.na(score)) %>% # Explicitly remove any remaining NAs
   select(intervention, outcome, time, score)
 
 # Step 4: plot using the new aggre function
@@ -1048,7 +1048,8 @@ ft_ancova
 model <- ancovas_unscaled$TCK # lm_robust(scale(post) ~ interv + pre + sem + gender)
 model2 <- lm(
   TCK_post ~ intervention + scale(TCK_pre) + scale(semester) + gender,
-  data = data_wide_unscaled
+  data = data_wide_unscaled,
+  contrasts = list(intervention = contr.treatment(3))
 )
 
 # ist das ein problem: averaged over levels of gender
@@ -1057,6 +1058,10 @@ model2 <- lm(
   ~intervention,
   weights = "proportional" # since gender and #-control is not balanced or do we want to keep it default?
 ))
+
+emmeans(model2, ~intervention) %>%
+  contrast(interaction = "pairwise", adjust = "none")
+
 
 # get following data to save in a separate df and prepare for plot: group, emmeans value, pretest mean
 plot_df <- emm %>%
