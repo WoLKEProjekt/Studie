@@ -89,6 +89,8 @@ p_load(lavaan, lme4, lmerTest, emmeans, estimatr)
 p_load(modelsummary)
 p_load(kableExtra, arsenal)
 
+p_load(patchwork)
+
 ## Visualisierung/Themes
 p_load(ggplot2, ggsci, jtools)
 
@@ -124,7 +126,7 @@ random_terms_lmer <- c("(1 | code)")
 groups <- c("intervention")
 time <- "time"
 outcomes <- c(
-  "AILIT",
+  # "AILIT",
   "AILIT26",
   "AILITwolke",
   "AILITglat",
@@ -139,8 +141,9 @@ outcomes <- c(
   "CEA_ped",
   "PU"
 )
-outcomes_ailit <- c("AILIT", "AILIT26", "AILITwolke", "AILITglat")
+outcomes_ailit <- c("AILIT26", "AILITwolke", "AILITglat") #removed AILIT
 outcomes_tpack <- c("TK", "TPK", "TCK", "TPACKce", "TPACKgenai", "Ethics")
+outcomes_cea <- c("CEA", "CEA_understanding", "CEA_ped")
 q_column_names <- c("AI", "GL", "TP", "RE02", "ED", "NP")
 vars_num <- c("age", "semester") # numeric outcomes
 vars_cat <- c("gender", "students") # categorical outcomes`
@@ -312,7 +315,7 @@ list_items_ailit <- list(
 # create new columns with the means of the lists
 data_merged <- data_merged %>%
   mutate(
-    AILIT = rowSums(cbind(AI35_02, GL20_01), na.rm = TRUE), # default sumscore overall AI Lit
+    # AILIT = rowSums(cbind(AI35_02, GL20_01), na.rm = TRUE), # default sumscore overall AI Lit
     AILIT26 = if_else(
       wave == "wise26",
       rowSums(cbind(AI35_02, GL20_01), na.rm = TRUE),
@@ -375,52 +378,11 @@ data_merged_long <- data_merged %>%
 ```
 
 ```{r descriptive-plots}
-# TPACK
-p_tpack <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(T|Ethics)")),
-  scales_facet = "fixed",
-  y_limits = c(1, 5)
-) +
-  ggtitle("Intelligent-TPACK")
-
 # ggplot(df, aes(x = time, y = score, color = group)) +
 #   geom_jitter(width = 0.08, alpha = 0.2) +
 #   stat_summary(aes(group = group), fun = mean, geom = "line", linewidth = 1) +
 #   stat_summary(aes(group = group), fun = mean, geom = "point", size = 3) +
 #   facet_wrap(~ subscale)
-
-data_merged_long %>%
-  filter(str_detect(outcome, "^(T)")) %>%
-  ggplot(aes(x = time, y = score, color = intervention, fill = intervention)) +
-  geom_jitter(
-    position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.3),
-    alpha = 0.3
-  ) +
-  geom_boxplot(
-    width = 0.2,
-    outlier.shape = NA,
-    alpha = 0.05,
-    notch = TRUE,
-    position = position_dodge(width = 0.3)
-  ) +
-  stat_summary(
-    aes(group = intervention),
-    fun = mean,
-    geom = "point",
-    shape = 23,
-    size = 3,
-    color = "black",
-    position = position_dodge(width = 0.3)
-  ) +
-  facet_wrap(~outcome) +
-  labs(
-    x = "Messzeitpunkt",
-    y = "Skalenwert",
-    color = "Gruppe",
-    fill = "Gruppe",
-    title = "Intelligent-TPACK Subscales Over Time by Group"
-  ) +
-  theme_bw()
 
 # ggsave(
 #   p_tpack + facet_wrap(~outcome, ncol = 3),
@@ -429,24 +391,6 @@ data_merged_long %>%
 #   height = 10,
 #   device = cairo_pdf
 # )
-
-# AILIT
-p_ailit <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(AILIT)"))
-) +
-  ggtitle("AI Literacy")
-
-# Critical Evaluation of AI
-p_cea <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(CEA)"))
-) +
-  ggtitle("Critical Evaluation of AI (CEA)")
-
-p_pu <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(PU)")),
-  scales_facet = "fixed"
-) +
-  ggtitle("Perceived Usefulness")
 ```
 
 # Methods
@@ -593,7 +537,7 @@ kable(
         TPK +
         TPACK_total +
         Ethics +
-        AILIT +
+        AILITwolke +
         PU,
       data_merged %>%
         filter(time == "pre", wave == "sose25") %>%
@@ -629,7 +573,7 @@ kable(
         TPK +
         TPACK_total +
         Ethics +
-        AILIT +
+        AILIT26 +
         CEA,
       data_merged %>%
         filter(time == "pre", wave == "wise26") %>%
@@ -827,52 +771,60 @@ For all outcome measure, we will first report the *main* treatment effect, i.e.,
 
 ## AI Literacy
 
-```{r fig-ai-lit, echo=FALSE, fig.cap="Descriptive Statistics of Students' AI Literacy Scores Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
-ailit_n_labels <- data_merged_long %>%
-  filter(outcome %in% outcomes_ailit) %>%
-  filter(!is.na(score)) %>%
-  group_by(outcome) %>%
-  summarise(n = n_distinct(code), .groups = "drop")
+```{r fig-ai-lit, echo=FALSE, fig.cap="Descriptive Statistics of Students' AI Literacy Scores Over Time by Treatment Group.", out.width="100%"}
+######################## predict, aggregate, transform to long, and plot
 
-# Note: fig-ai-lit uses data_merged_long (raw individual data from library merging)
-# Labels may differ slightly from processed AILIT scales (e.g., "Study-Specific" vs "Study Specific")
-ailit_fig_labels <- c(
-  "AI Literacy - Full Scale incl. 25",
-  "AI Literacy - Full Scale 26",
-  "AI Literacy - Study-Specific",
-  "AI Literacy - GLAT"
+# Define outcome scale labels
+ailit_labels <- c(
+  AILIT26 = "AI Literacy - Full Scale 26",
+  AILITwolke = "AI Literacy - Study Specific",
+  AILITglat = "AI Literacy - GLAT"
 )
 
-plot_outcome(
-  data_merged_long %>%
-    filter(outcome %in% outcomes_ailit) %>%
-    mutate(
-      outcome = factor(
-        outcome,
-        levels = outcomes_ailit,
-        labels = ailit_fig_labels
-      )
-    ),
-  ylab = "Score"
-) +
-  geom_text(
-    data = ailit_n_labels %>%
-      mutate(
-        outcome = factor(
-          outcome,
-          levels = outcomes_ailit,
-          labels = ailit_fig_labels
-        )
-      ),
-    aes(x = 1.5, y = Inf, label = paste0("n = ", n)),
-    inherit.aes = FALSE,
-    vjust = 1.5
-  ) +
-  ggtitle("AI Literacy") +
-  theme(legend.position = "bottom")
+# Prepare data: compute predictions + reshape to long format
+data_ailit_plot_long_individual <- prepare_comparison_data(
+  data_wide_unscaled,
+  outcomes_ailit,
+  ailit_labels,
+  ancovas_unscaled
+)
 
-#p_ailit %+% + facet_wrap(~outcome, ncol =2, scales="free")  + labs(y = "Score")  + theme(legend.position = "bottom")
+# Raw data plot
+p_ailit_raw <- plot_facet_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(AILIT)")),
+  ncol = 3,
+  outcome_labels = ailit_labels,
+  y_title = "Score",
+  y_zoom = NULL,
+  show_legend = FALSE,
+  show_strip_labels = TRUE,
+  plot_title = "AI Literacy",
+  plot_subtitle = NULL,
+  error_bars = TRUE,
+  show_n_per_facet = TRUE,
+  ylab = "Score"
+)
+
+# Predicted adjusted data plot
+p_ailit_pred <- plot_facet_outcome(
+  data_ailit_plot_long_individual,
+  ncol = 3,
+  outcome_labels = NULL, # Hide labels in row 2
+  y_title = "ANCOVA adjusted score",
+  y_zoom = NULL,
+  show_legend = TRUE,
+  show_strip_labels = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE,
+  # show_n_per_facet = TRUE,
+  ylab = "Score"
+)
+
+# Combine and display
+combine_raw_pred_plots(p_ailit_raw, p_ailit_pred)
 ```
+
 
 ```{r tab.layout = "autofit"}
 #| label: tbl-ancova-ailit-summary
@@ -887,93 +839,6 @@ if (is_word) {
   ft_ailit_ancova <- adjust_table_for_word(ft_ailit_ancova, width = .75)
 }
 ft_ailit_ancova
-```
-
-
-```{r}
-######################## predict, aggregate, transform to long, and plot
-
-scales_ailit <- c("AILIT", "AILIT26", "AILITwolke", "AILITglat")
-
-# Define outcome scale labels
-ailit_labels <- c(
-  AILIT = "AI Literacy - Full Scale incl. 25",
-  AILIT26 = "AI Literacy - Full Scale 26",
-  AILITwolke = "AI Literacy - Study Specific",
-  AILITglat = "AI Literacy - GLAT"
-)
-
-# Step 1: Compute adjusted posttest predictions for all scales in one go
-for (scale in scales_ailit) {
-  pre_var <- paste0(scale, "_pre")
-  adj_var <- paste0(scale, "_adj_post")
-
-  data_wide_unscaled[[adj_var]] <- predict(
-    ancovas_unscaled[[scale]],
-    data.frame(
-      intervention = data_wide_unscaled$intervention,
-      pretest = mean(data_wide_unscaled[[pre_var]], na.rm = TRUE),
-      gender = data_wide_unscaled$gender,
-      semester = data_wide_unscaled$semester
-    )
-  )
-}
-
-# Step 2: Aggregate means by intervention group
-data_ailit_agg <- data_wide_unscaled %>%
-  as.data.frame() %>%
-  group_by(intervention) %>%
-  summarise(
-    across(all_of(paste0(scales_ailit, "_adj_post")), ~ mean(., na.rm = TRUE)),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    !!!set_names(
-      map(
-        scales_ailit,
-        ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
-      ),
-      paste0(scales_ailit, "_mean_pre")
-    )
-  )
-
-# Step 3: Transform to long format with factors for plotting
-data_ailit_plot_long <- data_ailit_agg %>%
-  pivot_longer(
-    cols = -intervention,
-    names_to = "name",
-    values_to = "score"
-  ) %>%
-  mutate(
-    outcome = factor(
-      str_extract(name, "^[A-Za-z0-9]+"),
-      levels = scales_ailit,
-      labels = ailit_labels
-    ),
-    time = factor(
-      if_else(str_detect(name, "_mean_pre$"), "pre_mean", "post_adj"),
-      levels = c("pre_mean", "post_adj")
-    )
-  ) %>%
-  filter(!is.na(score)) %>% # Explicitly remove any remaining NAs
-  select(intervention, outcome, time, score)
-
-# Step 4: plot using the new aggre function
-p_ailit_plot <- plot_outcome_agg(
-  data = data_ailit_plot_long,
-  groups = "intervention",
-  outcome_var = "outcome",
-  ylab = "Score",
-  scales_facet = "free_y",
-  ncol = 2
-  # y_limits = c(1, 5)
-) +
-  labs(
-    title = "AI Literacy Aggregated Data",
-    subtitle = "Pretest Mean and Adjusted Posttest Predictions"
-  )
-
-p_ailit_plot
 ```
 
 ```{r, results="asis"}
@@ -996,34 +861,68 @@ if (!is_word) {
 
 ## Intelligent TPACK and AI Ethics
 
-```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
+```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%"} 
+# ,fig.width=7, fig.height=6.5}
+# ========================================
+# TPACK: Comparison Plots (Raw vs Predicted)
+# ========================================
+
+tpack_labels <- c(
+  TK = "Intelligent TK",
+  TPK = "Intelligent TPK",
+  TCK = "Intelligent TCK",
+  TPACKce = "Intelligent TPACK - Core",
+  TPACKgenai = "iTPACK - Generative AI",
+  Ethics = "AI Ethics"
+)
+
+# Prepare data: compute predictions + reshape to long format
+data_tpack_plot_long_individual <- prepare_comparison_data(
+  data_wide_unscaled,
+  outcomes_tpack,
+  tpack_labels,
+  ancovas_unscaled
+)
+
+# Get sample size
 n_tpack <- data_merged_long %>%
   filter(outcome %in% outcomes_tpack) %>%
   filter(!is.na(score)) %>%
   summarise(n = n_distinct(code)) %>%
   pull(n)
 
-p_tpack +
-  facet_wrap(
-    ~outcome,
-    scales = "fixed",
-    ncol = 3,
-    labeller = labeller(
-      outcome = c(
-        TK = "Intelligent TK",
-        TCK = "Intelligent TCK",
-        TPK = "Intelligent TPK",
-        TPACKce = "Intelligent TPACK - Core",
-        TPACKgenai = "iTPACK - Generative AI",
-        Ethics = "AI Ethics"
-      )
-    )
-  ) +
-  labs(
-    title = "Intelligent TPACK and AI Ethics",
-    subtitle = paste0("N = ", n_tpack)
-  ) +
-  theme(legend.position = "bottom")
+# Raw data plot
+p_tpack_raw <- plot_facet_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(T|Ethics)")),
+  ncol = 6,
+  outcome_labels = tpack_labels,
+  y_title = NULL,
+  y_zoom = c(2, 4.5),
+  show_legend = FALSE,
+  show_strip_labels = TRUE,
+  plot_title = "Intelligent TPACK and AI Ethics",
+  plot_subtitle = paste0("N = ", n_tpack),
+  error_bars = TRUE
+  # show_n_per_facet = TRUE
+)
+
+# Predicted adjusted data plot
+p_tpack_pred <- plot_facet_outcome(
+  data_tpack_plot_long_individual,
+  ncol = 6,
+  outcome_labels = NULL, # Hide labels in row 2
+  y_title = "ANCOVA adjusted rating",
+  y_zoom = c(2, 4.5),
+  show_legend = TRUE,
+  show_strip_labels = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE
+  # show_n_per_facet = TRUE
+)
+
+# Combine and display
+combine_raw_pred_plots(p_tpack_raw, p_tpack_pred)
 ```
 
 
@@ -1040,225 +939,6 @@ if (is_word) {
   ft_ancova <- adjust_table_for_word(ft_ancova, width = 1)
 }
 ft_ancova
-
-# summary(lm(TCK_post~intervention + scale(TCK_pre) + scale(semester) + gender, data=data_wide_unscaled)) #wenn man das hier mit dem emmeans vergleicht/addiert, warum ändern sich die werte? contrasts für gender müssen oben gesetzt sein
-
-# take model TCK and get the adjusted posttest means for each group with emmeans
-
-model <- ancovas_unscaled$TCK # lm_robust(scale(post) ~ interv + pre + sem + gender)
-model2 <- lm(
-  TCK_post ~ intervention + scale(TCK_pre) + scale(semester) + gender,
-  data = data_wide_unscaled,
-  contrasts = list(intervention = contr.treatment(3))
-)
-
-# ist das ein problem: averaged over levels of gender
-(emm <- emmeans(
-  model2, # model - egal kommts gleiche raus
-  ~intervention,
-  weights = "proportional" # since gender and #-control is not balanced or do we want to keep it default?
-))
-
-emmeans(model2, ~intervention) %>%
-  contrast(interaction = "pairwise", adjust = "none")
-
-
-# get following data to save in a separate df and prepare for plot: group, emmeans value, pretest mean
-plot_df <- emm %>%
-  as.data.frame() %>%
-  transmute(
-    intervention,
-    adj_post = emmean,
-    pretest = mean(data_wide_unscaled$TCK_pre, na.rm = TRUE)
-  )
-
-# kontrolle wenn ich das händisch mit predict mache
-tck_pred <- predict(
-  ancovas_unscaled$TCK,
-  data.frame(
-    intervention = data_wide_unscaled$intervention,
-    pretest = mean(data_wide_unscaled$TCK_pre, na.rm = TRUE),
-    gender = data_wide_unscaled$gender,
-    semester = data_wide_unscaled$semester
-  )
-)
-
-# Aggregate predictions by intervention group to compare with emmeans
-tck_pred_agg <- data.frame(
-  intervention = data_wide_unscaled$intervention,
-  prediction = tck_pred
-) %>%
-  group_by(intervention) %>%
-  summarise(
-    predict_mean = mean(prediction, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Compare emmeans vs predict results
-comparison <- plot_df %>%
-  left_join(tck_pred_agg, by = "intervention")
-
-print("Comparison of emmeans vs predict for TCK:")
-print(comparison)
-
-######################## predict, aggregate, transform to long, and plot
-
-scales_tpack <- c("TK", "TPK", "TCK", "TPACKce", "TPACKgenai", "Ethics")
-
-# Define outcome scale labels
-tpack_labels <- c(
-  TK = "Intelligent TK",
-  TPK = "Intelligent TPK",
-  TCK = "Intelligent TCK",
-  TPACKce = "Intelligent TPACK - Core",
-  TPACKgenai = "iTPACK - Generative AI",
-  Ethics = "AI Ethics"
-)
-
-# Step 1: Compute adjusted posttest predictions for all scales in one go
-for (scale in scales_tpack) {
-  pre_var <- paste0(scale, "_pre")
-  adj_var <- paste0(scale, "_adj_post")
-
-  data_wide_unscaled[[adj_var]] <- predict(
-    ancovas_unscaled[[scale]],
-    data.frame(
-      intervention = data_wide_unscaled$intervention,
-      pretest = mean(data_wide_unscaled[[pre_var]], na.rm = TRUE),
-      gender = data_wide_unscaled$gender,
-      semester = data_wide_unscaled$semester
-    )
-  )
-}
-
-# Step 2: Aggregate means by intervention group
-data_tpack_agg <- data_wide_unscaled %>%
-  as.data.frame() %>%
-  group_by(intervention) %>%
-  summarise(
-    across(all_of(paste0(scales_tpack, "_adj_post")), ~ mean(., na.rm = TRUE)),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    !!!set_names(
-      map(
-        scales_tpack,
-        ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
-      ),
-      paste0(scales_tpack, "_mean_pre")
-    )
-  )
-
-# Step 3: Transform to long format with factors for plotting
-data_tpack_plot_long <- data_tpack_agg %>%
-  pivot_longer(
-    cols = -intervention,
-    names_to = "name",
-    values_to = "score"
-  ) %>%
-  mutate(
-    outcome = factor(
-      str_extract(name, "^[A-Za-z]+"),
-      levels = scales_tpack,
-      labels = tpack_labels
-    ),
-    time = factor(
-      if_else(str_detect(name, "_mean_pre$"), "pre_mean", "post_adj"),
-      levels = c("pre_mean", "post_adj")
-    )
-  ) %>%
-  select(intervention, outcome, time, score)
-
-# Step 4: plot using the new aggre function
-p_tpack_plot <- plot_outcome_agg(
-  data = data_tpack_plot_long,
-  groups = "intervention",
-  outcome_var = "outcome",
-  ylab = "Rating",
-  scales_facet = "fixed",
-  ncol = 3,
-  y_limits = c(1, 5)
-) +
-  labs(
-    title = "Intelligent TPACK and AI Ethics Aggregated Data",
-    subtitle = "Pretest Mean and Adjusted Posttest Predictions"
-  )
-
-p_tpack_plot
-```
-
-```{r}
-# Non-aggregated version keeping all subject data
-# Calculate pretest mean for each scale
-pretest_means <- tibble(
-  scale = scales_tpack,
-  pretest_mean = map_dbl(
-    scales_tpack,
-    ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
-  )
-) %>%
-  mutate(
-    outcome = factor(scale, levels = scales_tpack, labels = tpack_labels)
-  ) %>%
-  select(outcome, pretest_mean)
-
-# Transform individual subject data to long format
-data_tpack_plot_long_individual <- data_wide_unscaled %>%
-  as.data.frame() %>%
-  select(
-    code,
-    intervention,
-    all_of(c(
-      paste0(scales_tpack, "_pre"),
-      paste0(scales_tpack, "_adj_post")
-    ))
-  ) %>%
-  pivot_longer(
-    cols = -c(code, intervention),
-    names_to = "name",
-    values_to = "score"
-  ) %>%
-  mutate(
-    scale = str_extract(name, "^[A-Za-z]+"),
-    outcome = factor(scale, levels = scales_tpack, labels = tpack_labels),
-    time = factor(
-      if_else(str_detect(name, "_pre$"), "pre_mean", "post_adj"),
-      levels = c("pre_mean", "post_adj")
-    )
-  ) %>%
-  left_join(pretest_means, by = "outcome") %>%
-  mutate(
-    score = if_else(time == "pre_mean", pretest_mean, score)
-  ) %>%
-  select(code, intervention, outcome, time, score)
-
-
-# TPACK plot using the old plot function
-p_tpack_adj <- plot_outcome(
-  data_tpack_plot_long_individual %>%
-    filter(str_detect(as.character(outcome), "^(Intelligent|AI|iTPACK)")) %>%
-    mutate(
-      outcome = factor(outcome, levels = tpack_labels)
-    ),
-  scales_facet = "fixed",
-  y_limits = c(1, 5)
-) +
-  ggtitle("Intelligent-TPACK")
-
-p_tpack_adj +
-  facet_wrap(
-    ~outcome,
-    scales = "fixed",
-    ncol = 3,
-    labeller = labeller(
-      outcome = structure(names(tpack_labels), names = tpack_labels)
-    )
-  ) +
-  labs(
-    title = "Intelligent TPACK and AI Ethics Individual Data",
-    subtitle = paste0("N = ", n_tpack)
-  ) +
-  theme(legend.position = "bottom")
 ```
 
 ## Critical Evaluation of AI (CEA)
@@ -1270,6 +950,12 @@ n_cea <- data_merged_long %>%
   filter(!is.na(score)) %>%
   summarise(n = n_distinct(code)) %>%
   pull(n)
+
+# Critical Evaluation of AI
+p_cea <- plot_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(CEA)"))
+) +
+  ggtitle("Critical Evaluation of AI (CEA)")
 
 p_cea +
   facet_wrap(
@@ -1289,6 +975,61 @@ p_cea +
     subtitle = paste0("N = ", n_cea)
   ) +
   theme(legend.position = "bottom")
+
+
+cea_labels <- c(
+  CEA = "Critical Evaluation of AI (CEA) - Full Scale",
+  CEA_understanding = "Critical Understanding of AI",
+  CEA_ped = "Pedagogical Evaluation of AI Output"
+)
+
+# Prepare data: compute predictions + reshape to long format
+data_cea_plot_long_individual <- prepare_comparison_data(
+  data_wide_unscaled,
+  outcomes_cea,
+  cea_labels,
+  ancovas_unscaled
+)
+
+# Get sample size
+n_cea <- data_merged_long %>%
+  filter(outcome %in% outcomes_cea) %>%
+  filter(!is.na(score)) %>%
+  summarise(n = n_distinct(code)) %>%
+  pull(n)
+
+# Raw data plot
+p_cea_raw <- plot_facet_outcome(
+  data_merged_long %>% filter(str_detect(outcome, "^(CEA)")),
+  ncol = 3,
+  outcome_labels = cea_labels,
+  y_title = NULL,
+  y_zoom = c(3.2, 4.8),
+  show_legend = FALSE,
+  show_strip_labels = TRUE,
+  plot_title = "Critical Evaluation of AI",
+  plot_subtitle = paste0("N = ", n_cea),
+  error_bars = TRUE
+  # show_n_per_facet = TRUE
+)
+
+# Predicted adjusted data plot
+p_cea_pred <- plot_facet_outcome(
+  data_cea_plot_long_individual,
+  ncol = 3,
+  outcome_labels = NULL, # Hide labels in row 2
+  y_title = "ANCOVA adjusted rating",
+  y_zoom = c(3.2, 4.8),
+  show_legend = TRUE,
+  show_strip_labels = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE
+  # show_n_per_facet = TRUE
+)
+
+# Combine and display
+combine_raw_pred_plots(p_cea_raw, p_cea_pred)
 ```
 
 ::: {.landscape}

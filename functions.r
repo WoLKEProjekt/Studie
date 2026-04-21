@@ -147,7 +147,8 @@ plot_outcome <- function(
   groups = "intervention",
   ylab = "Rating",
   scales_facet = "free",
-  y_limits = NULL
+  y_limits = NULL,
+  error_bars = FALSE
 ) {
   # set color scale/palette and plot theme
   wolke_color_scale <- scale_colour_manual(values = rev(pal_jco("default")(3)))
@@ -176,7 +177,11 @@ plot_outcome <- function(
       aes(linetype = get(groups))
     ) +
     # add error bars
-    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.1) +
+    {
+      if (error_bars) {
+        stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.1)
+      }
+    } +
     facet_wrap(~outcome, scales = scales_facet, ncol = 2) +
     labs(
       x = "Time",
@@ -185,7 +190,9 @@ plot_outcome <- function(
       shape = "Treatment Groups",
       linetype = "Treatment Groups"
     ) +
-    {if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL} +
+    {
+      if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL
+    } +
     wolke_color_scale +
     wolke_theme
 }
@@ -234,7 +241,9 @@ plot_outcome_agg <- function(
       shape = "Treatment Groups",
       linetype = "Treatment Groups"
     ) +
-    {if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL} +
+    {
+      if (!is.null(y_limits)) scale_y_continuous(limits = y_limits) else NULL
+    } +
     wolke_color_scale +
     wolke_theme
 }
@@ -631,3 +640,210 @@ modelsummary_output <- ifelse(
   "latex_tabular",
   ifelse(knitr::is_html_output(), "kableExtra", "flextable")
 )
+
+#' Prepare individual-level prediction data for comparison plots
+#'
+#' Transforms raw ANCOVA predictions and pretest data into long format suitable
+#' for plotting raw vs. predicted comparisons.
+#'
+#' @param data_wide_unscaled Data frame with pre/post scores and covariates
+#' @param scales Character vector of scale names (e.g., c("TK", "TPK", "TCK", ...))
+#' @param labels Named character vector mapping scale names to display labels
+#' @param ancovas_unscaled List of fitted ANCOVA models (one per scale)
+#'
+#' @return Long-format data frame with columns: code, intervention, outcome, time, score
+#'
+prepare_comparison_data <- function(
+  data_wide_unscaled,
+  scales,
+  labels,
+  ancovas_unscaled
+) {
+  # Step 1: Compute adjusted posttest predictions for all scales
+  for (scale in scales) {
+    pre_var <- paste0(scale, "_pre")
+    adj_var <- paste0(scale, "_adj_post")
+
+    data_wide_unscaled[[adj_var]] <- predict(
+      ancovas_unscaled[[scale]],
+      data.frame(
+        intervention = data_wide_unscaled$intervention,
+        pretest = mean(data_wide_unscaled[[pre_var]], na.rm = TRUE),
+        gender = data_wide_unscaled$gender,
+        semester = data_wide_unscaled$semester
+      )
+    )
+  }
+
+  # Step 2: Calculate pretest mean for each scale
+  pretest_means <- tibble(
+    scale = scales,
+    pretest_mean = map_dbl(
+      scales,
+      ~ mean(data_wide_unscaled[[paste0(.x, "_pre")]], na.rm = TRUE)
+    )
+  ) %>%
+    mutate(
+      outcome = factor(scale, levels = scales, labels = labels)
+    ) %>%
+    select(outcome, pretest_mean)
+
+  # Step 3: Transform individual subject data to long format
+  data_wide_unscaled %>%
+    as.data.frame() %>%
+    select(
+      code,
+      intervention,
+      all_of(c(
+        paste0(scales, "_pre"),
+        paste0(scales, "_adj_post")
+      ))
+    ) %>%
+    pivot_longer(
+      cols = -c(code, intervention),
+      names_to = "name",
+      values_to = "score"
+    ) %>%
+    mutate(
+      scale = str_remove(name, "_pre$|_adj_post$"),
+      outcome = factor(scale, levels = scales, labels = labels),
+      time = factor(
+        if_else(str_detect(name, "_pre$"), "pre_mean", "post_adj"),
+        levels = c("pre_mean", "post_adj")
+      )
+    ) %>%
+    left_join(pretest_means, by = "outcome") %>%
+    mutate(
+      score = if_else(time == "pre_mean", pretest_mean, score)
+    ) %>%
+    select(code, intervention, outcome, time, score)
+}
+
+#' Create a faceted outcome plot with standard styling
+#'
+#' Wraps plot_outcome() + facet_wrap() with consistent theme and coordinate settings.
+#'
+#' @param data Input data frame with outcome and score columns
+#' @param ncol Number of facet columns
+#' @param outcome_labels Named character vector for facet labels (if NULL, uses default)
+#' @param y_title Y-axis title
+#' @param y_zoom Y-axis zoom limits via coord_cartesian (e.g., c(2, 4.5))
+#' @param show_legend Logical: show legend at bottom?
+#' @param show_strip_labels Logical: show facet strip text?
+#' @param show_n_per_facet Logical: append sample size to each facet label?
+#' @param plot_title Main plot title
+#' @param plot_subtitle Plot subtitle
+#' @param error_bars Logical: include error bars from plot_outcome()?
+#' @param ... Additional arguments passed to plot_outcome()
+#'
+#' @return A ggplot object
+#'
+plot_facet_outcome <- function(
+  data,
+  ncol = 6,
+  outcome_labels = NULL,
+  y_title = NULL,
+  y_zoom = NULL,
+  show_legend = TRUE,
+  show_strip_labels = TRUE,
+  show_n_per_facet = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE,
+  ylab = "Rating"
+) {
+  # Create base plot (without show_n_per_facet passed to plot_outcome)
+  p <- plot_outcome(
+    data,
+    scales_facet = "free",
+    error_bars = error_bars,
+    ylab = ylab
+  )
+
+  # Calculate n per outcome if requested
+  if (show_n_per_facet) {
+    n_per_outcome <- data %>%
+      filter(!is.na(score)) %>%
+      group_by(outcome) %>%
+      summarise(n = n_distinct(code), .groups = "drop")
+
+    # Create labels with n on separate line
+    if (!is.null(outcome_labels)) {
+      # Match outcome levels to labels and add n below
+      facet_labels <- set_names(
+        paste0(
+          outcome_labels[match(n_per_outcome$outcome, names(outcome_labels))],
+          "\n(n=",
+          n_per_outcome$n,
+          ")"
+        ),
+        n_per_outcome$outcome
+      )
+    } else {
+      facet_labels <- set_names(
+        paste0(n_per_outcome$outcome, "\n(n=", n_per_outcome$n, ")"),
+        n_per_outcome$outcome
+      )
+    }
+  } else {
+    facet_labels <- outcome_labels
+  }
+
+  # Build labeller
+  if (!is.null(facet_labels)) {
+    p <- p +
+      facet_wrap(
+        ~outcome,
+        scales = "free",
+        ncol = ncol,
+        labeller = labeller(outcome = facet_labels)
+      )
+  } else {
+    p <- p +
+      facet_wrap(
+        ~outcome,
+        scales = "free",
+        ncol = ncol
+      )
+  }
+
+  # Add labs and theme
+  p <- p +
+    labs(
+      title = plot_title,
+      subtitle = plot_subtitle,
+      y = y_title,
+      x = NULL
+    )
+
+  # Theme settings
+  legend_pos <- if (show_legend) "bottom" else "none"
+
+  # Build theme list conditionally to avoid merging incompatible elements
+  theme_list <- list(legend.position = legend_pos)
+
+  if (!show_strip_labels) {
+    theme_list$strip.text.x <- element_blank()
+  }
+
+  p <- p + do.call(theme, theme_list)
+
+  # Add zoom if specified
+  if (!is.null(y_zoom)) {
+    p <- p + coord_cartesian(ylim = y_zoom)
+  }
+
+  p
+}
+
+#' Combine raw and predicted plots vertically with patchwork
+#'
+#' @param p_raw Raw data plot
+#' @param p_pred Predicted/adjusted data plot
+#'
+#' @return Combined plot via patchwork /
+#'
+combine_raw_pred_plots <- function(p_raw, p_pred) {
+  library(patchwork)
+  p_raw / p_pred
+}
