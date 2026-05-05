@@ -1,6 +1,6 @@
 ---
 title: "WoLKE-Studie"
-author: "Benedikt Beuttler"
+author: "Benedikt Beuttler & Heiko Holz"
 date: "`r Sys.Date()`"
 lang: en
 page-layout: full
@@ -377,22 +377,6 @@ data_merged_long <- data_merged %>%
   )
 ```
 
-```{r descriptive-plots}
-# ggplot(df, aes(x = time, y = score, color = group)) +
-#   geom_jitter(width = 0.08, alpha = 0.2) +
-#   stat_summary(aes(group = group), fun = mean, geom = "line", linewidth = 1) +
-#   stat_summary(aes(group = group), fun = mean, geom = "point", size = 3) +
-#   facet_wrap(~ subscale)
-
-# ggsave(
-#   p_tpack + facet_wrap(~outcome, ncol = 3),
-#   file = "figures/plot-tpack.pdf",
-#   width = 8,
-#   height = 10,
-#   device = cairo_pdf
-# )
-```
-
 # Methods
 
 ## Participants
@@ -452,19 +436,35 @@ data_participants_26 <- data_merged %>%
   )
 ```
 
+```{r dropouts}
+# get participants who only participated in pre or post test
+data_dropouts <- data_all_merged %>%
+  group_by(code) %>%
+  summarise(
+    has_pre = any(time == "pre"),
+    has_post = any(time == "post"),
+    .groups = "drop"
+  ) %>%
+  summarise(
+    n_pre_only = sum(has_pre & !has_post),
+    n_post_only = sum(!has_pre & has_post),
+    n_both = sum(has_pre & has_post)
+  )
+```
+
 The study involved pre-service teachers from two universities of education in Baden-Württemberg, Germany. Participants were divided into a **treatment group** consisting of two intervention groups (STEM and language course), and a **control group**.
-Students in the treatment groups self-selected the courses "AI in STEM/Language Education" as part of their compulsory elective studies. The control group was recruited from other STEM and language courses at the Universities during the same semester. (genauer drauf eingehen, dass sprachgruppe nur in lubu kontrolle hatte?)
+Students in the treatment groups self-selected the courses "AI in STEM/Language Education" as part of their compulsory elective studies. The control group was recruited from other STEM and language courses of the Universities during the same semester.
 
-In total, $N=`r data_all %>% filter(time=="pre") %>% nrow()`$ students originally participated in the study ($N_c=`r data_all %>% filter(time=="pre", intervention=="control") %>%nrow`$ in the control group, $N_s= `r data_all %>% filter(time=="pre", intervention=="stem") %>%nrow `$ in the STEM course, and $N_l=`r data_all %>% filter(time=="pre", intervention=="language") %>%nrow `$ in the language course), of which $n=`r data_participants$n %>% sum`$ completed both pre- and the posttest and were included in the analyses ($n_c = `r data_participants%>%filter(intervention=="control") %>% select(n)%>%sum`$, $n_s = `r data_participants%>%filter(intervention=="stem") %>% select(n)%>%sum`$, $n_l = `r data_participants%>%filter(intervention=="language") %>% select(n) %>% sum`$).
+In total, $N=`r length(unique(data_all_merged$code))`$ students originally participated in the study ($N_c=`r data_all_merged %>% filter(intervention == "control") %>% distinct(code) %>% nrow()`$ in the control group, $N_s= `r data_all_merged %>% filter(intervention == "stem") %>% distinct(code) %>% nrow()`$ in the STEM course, and $N_l=`r data_all_merged %>% filter(intervention == "language") %>% distinct(code) %>% nrow()`$ in the language course), of which $n=`r data_participants$n %>% sum`$ completed both pre- and the posttest and were included in the analyses ($n_c = `r data_participants%>%filter(intervention=="control") %>% select(n)%>%sum`$, $n_s = `r data_participants%>%filter(intervention=="stem") %>% select(n)%>%sum`$, $n_l = `r data_participants%>%filter(intervention=="language") %>% select(n) %>% sum`$).
 
-Unfortunately, we observed a high drop-out rate between the pre- and posttest. We attribute this to several factors: First, the posttests were conducted in class close  (one to two weeks) to the examination period, resulting in students not attending the in-person posttest sessions. For the control group, some lecturers executed the posttest during their teaching, while others did not. We suspect a high drop-out at the posttest for the control group due to both factors: students not attending the sessions close to the examination week and not conducting the tests at home or in their free study time.
+Unfortunately, we observed a high drop-out rate between the pre- and posttest. We attribute this to several factors: First, the posttests were conducted in class close (one to two weeks) to the examination period, resulting in students not attending the in-person posttest sessions. For the control group, some lecturers executed the posttest during their teaching, while others did not. We suspect a high drop-out at the posttest for the control group due to both factors: students not attending the sessions close to the examination week and not conducting the tests at home or in their free study time.
 
-Descriptive statistics of students' demographics and pretest scores are presented in [@tbl-participants]. The final sample size included in the analyses was $n=`r nrow(data_pre)`$, aged between $`r data_pre$age%>%min`$ and $`r data_pre$age %>% max`$ years (true facts?) ($M=`r data_pre$age%>%mean %>% round(2)`$, $SD=`r data_pre$age%>%sd%>%round(2)`$), of which $`r data_pre%>%filter(gender=="Female")%>%nrow`$ identified as female and $`r data_pre%>%filter(gender=="Male")%>%nrow`$ as male.
-The students were enrolled in semester $`r data_pre$semester%>%min`$ to $`r data_pre$semester%>%max`$ ($M=`r data_pre$semester%>%mean%>%round(2)`$, $SD=`r data_pre$semester%>%sd%>%round(2)`$). Of these, $`r data_pre%>%filter(students=="bachelor")%>%nrow`$ students were at the Bachelor's level and $`r data_pre%>%filter(students=="master")%>%nrow`$ at the Master's level.
+Descriptive statistics of students' demographics and pretest scores are presented in [@tbl-participants]. The final sample size included in the analyses was $n=`r nrow(data_merged_pre)`$, aged between $`r data_merged_pre$age%>%min`$ and $`r data_merged_pre$age %>% max`$ years (true facts?) ($M=`r data_merged_pre$age%>%mean %>% round(2)`$, $SD=`r data_merged_pre$age%>%sd%>%round(2)`$), of which $`r data_merged_pre%>%filter(gender=="Female")%>%nrow`$ identified as female and $`r data_merged_pre%>%filter(gender=="Male")%>%nrow`$ as male.
+The students were enrolled in semester $`r data_merged_pre$semester%>%min`$ to $`r data_merged_pre$semester%>%max`$ ($M=`r data_merged_pre$semester%>%mean%>%round(2)`$, $SD=`r data_merged_pre$semester%>%sd%>%round(2)`$). Of these, $`r data_merged_pre%>%filter(students=="bachelor")%>%nrow`$ students were at the Bachelor's level and $`r data_merged_pre%>%filter(students=="master")%>%nrow`$ at the Master's level.
 
 ```{r table-participants, result = "asis"}
 #| label: tbl-participants
-#| tbl-cap: "Demographic Data of the Three Experimental Groups."
+#| tbl-cap: "Demographic Data of the Three Experimental Groups and pretest scores."
 # render as table
 format <- ifelse(
   knitr::is_html_output(),
@@ -597,62 +597,45 @@ kable(
 
 ## Materials
 
-### Translation Process (todo Bene)
+### Translation Process
+
+::: {.callout-note}
+
+Hier nur in kurzer Ausführung? Ausfühlicher dann im 2025 paper
+
+:::
+The Intelligent-TPACK by @celik2023 is widely used to assess teachers’ knowledge for pedagogical and ethical AI use, but no validated German version exists.
+We therefore translated the Intelligent-TPACK and selected AI ethics items using a participatory multi-step process (Modified Direct Translation; @behling.law2025), involving independent translations, group discussion, and expert review to reach consensus. The translation and validation are reported in detail in @authorsinprep.
+<!-- 
 The Intelligent-TPACK, originally developed by @celik2023, is widely used to assess teachers’ knowledge for pedagogical and ethical AI use based on the technological, pedagogical, and content knowledge (TPACK) framework.
 However, no empirically validated German translations of the Intelligent-TPACK exists. While some studies translate and use subsets of the Intelligent-TPACK [e.g., @mah.gross2024], there is no validated German version of the full instrument. 
 
 Therefore, for the Intelligent-TPACK by @celik2023 as well as for items from the AI ethics subscale from @chiu.ahmad.ea2024, we translated the original items in a participative multi-step process involving not just experts from the fields of computer science and education, but also (pre-service) teachers.
 For this, we applied the *Modified Direct Translation* that includes translators and experts discussing the wording until reaching agreement [@behling.law2025]: First, seven researchers and experts in AI ED (additionally including one English teacher and one student teacher of Computer Science and English) translated the items independently. Second, we compared all translations and marked the items that received different translations. In a third step, we performed a group workshop with all translators in which the marked items were discussed and dot voting was applied to decide on the most apporopriate translation. Finally, three items that were still marked as questionable were discussed and further adapted with a native English teacher who teaches at University 2.
 
-The translation and validation of the Intelligent-TPACK is reported in detail in @authorsinprep.
+The translation and validation of the Intelligent-TPACK is reported in detail in @authorsinprep. -->
 
 
-### Data Preparation and Cleaning (todo Bene)
+### Data Preparation and Cleaning
 
-```{r dropouts}
-# get participants who only participated in pre or post test
-data_dropouts <- data_all_merged %>%
-  group_by(code) %>%
-  summarise(
-    has_pre = any(time == "pre"),
-    has_post = any(time == "post"),
-    .groups = "drop"
-  ) %>%
-  summarise(
-    n_pre_only = sum(has_pre & !has_post),
-    n_post_only = sum(!has_pre & has_post),
-    n_both = sum(has_pre & has_post)
-  )
-```
+For data cleaning, we first retained only completed trials. Next, based on a string distance analysis using the Levenshtein distance [@levenshtein1966], we identified subject codes that were likely to belong to the same student but had been entered slightly differently, for example due to typographical errors. We manually checked these cases and corrected or merged codes where appropriate. After this step, the subject codes were anonymized. We then excluded students who participated only at the pretest ($n=`r data_dropouts$n_pre_only`$) or only at the posttest ($n=`r data_dropouts$n_post_only`$), so that only students with data from both measurement occasions remained. Finally, to ensure that each student contributed exactly one pretest and one posttest, we checked for duplicate entries within measurement occasions. In cases where students completed the pretest or posttest more than once, we retained only the first completed response and removed the additional entries.
 
-if the bullet point already exists in the text, take it from there, adjust with following changes:
-- very first step was to only allow trials that are completed
-- check codes with levenshtein distance 1 and 2 and correct them
-- correct multiple post or pre post entries of same codes down to one (students that filled out)
-
-For data cleaning, we applied the following steps: First, we investigated which students, based on their pseudonyms, did not participate in both test sessions. Based on a string distance analysis using the Levenshtein distance [@levenshtein1966], we identified pseudonyms that were likely to belong to the same student but were entered slightly differently (e.g., due to typos or students who moved during the semester, as the address was part of their pseudonym). We then manually checked these pseudonyms and merged them if we believe they belonged to the same student. This resulted in $n=24$ students being merged.
-We then removed students who only participated at the pretest ($n=`r data_dropouts$n_pre_only`$) or only at the posttest ($n=`r data_dropouts$n_post_only`$).
-Further, some students conducted the post test twice. In this case, we only considered their first response in the analyses and dropped the second.
-
-As for some self-constructed items students could choose "I don't understand the item" as a response option, we recoded these responses as missing values ($n=`r data %>%
-  select(all_of(c(list_items_i_tpack, list_items_pu)%>%unlist)) %>%
-  summarise(across(everything(), ~ sum(is.na(.x)))) %>% sum`$ responses to individual items).
-
-For the Intelligent TPACK, AI ethics and perceived usefulness (sub)scales, we calculated the mean score across all items of the respective (sub)scale per student. For AI literacy, we calculated the sum score across all items. We additionally calculated the sum score for the subset of items of the AI literacy   that that directly reflect the topics addressed in the course, see SECTION MATERIALS.
+For the Intelligent TPACK, AI ethics and CEA (sub)scales, we calculated the mean reported score across all items of the respective (sub)scale per student. AI literacy was captured using three complementary sum scores: a full scale score based on all AI literacy items, a study-specific score based on the subset of items directly aligned with course content, and a GLAT-specific score based on the corresponding GLAT items. (REF zu anderer Section?)
 
 
 ## Statistical Analysis
 
-We analyzed the interventions' efficacy in a multiple linear regression analysis approach. For this, we implemented a one-way ANCOVA for each outcome measure, considering our $3$ factorial design.
+To examine the efficacy of the interventions, we conducted separate ANCOVA models for each outcome measure. In each model, posttest scores were regressed on treatment condition while controlling for the respective pretest score, gender, and semester count, consistent with our three-group pretest–posttest design.
+
+Following the baseline equivalence criteria for randomized controlled trials proposed by the What Works Clearinghouse [@WWC2022], we additionally considered baseline variables as covariates if group differences were statistically significant or if the standardized mean difference exceeded $d = .05$. We tested for baseline differences between treatment groups in age, gender, semester count, and study level (Bachelor’s vs. Master’s). Statistically significant group differences were found for gender and semester count. Therefore, these variables were included as covariates in all models (see [@tbl-participants]).
+
 
 ::: {.callout-note}
-We did not include the university dummy variable for the clustering of students within universities, as we only have control students at University 2 (and thus yields a high correlation with treatment as well).
-Kontraste noch nennen?
+
+muss noch drauf eingegangen werden, warum location nicht als mögl. covar aufgenommen wurde? issue ist hier ja dass language nur in phl gab, deswegen wird das auch "significant"
+
 :::
 
-Additionally, we included the respective pretest score of the outcome measures as a covariate in the analyses.
-Finally, we included variables as a covariate if they met the criteria for baseline equivalence in randomized controlled trials by the What Works Clearinghouse [@WWC2022]. That is, we included the variables as covariates if the difference between the groups was statistically significant, or if it exceeded $d>.05$.
-We tested for group differences concerning the following variables at baseline (pretest): age, gender, semester, and study level (Bachelor vs. Master). We found for gender and semesters  statistically significant differences between the treamtment groups, see [@tbl-participants]. We thus included the following covariates in the models: gender and semester.
 
 That is, the final model for each outcome measure contained treatment, pretest score, gender, semester, and University as fixed effects, and was specified as follows:
 `lm_robust(outcome_post ~ treatment + outcome_pre + gender + semester )`.
@@ -668,7 +651,7 @@ The raw data and *R* scripts detailing the analyses can be accessed in the onlin
 ### Statistical Software
 All analyses were conducted in *R* [@R2024]. Data were prepared using *dplyr* [wickham2023:dplyr], *tidyr* [@wickham2024], and *gtools* [@warnes2023]. Tables were created with *arsenal* [@heinzen2021], *vtable* [@huntington2023], *modelsummary* [@arel-bundock2022], and *kableExtra* [@zhu2024]. Figures were produced using *ggplot2* [@wickham2016], *ggsci* [@xiao2024], and *jtools* [@long2022]. The ANCOVA models were estimated using *lm_robust* from the *estimatr* package [@blair2025]. To compute heteroscedasticity-consistent (HC) standard errors, we specified the HC3 estimator, as recommended for small samples [@long2000]. Where applicable, pairwise comparisons were obtained with *emmeans* [@lenth2025].
 
-```{r ancova}
+```{r ancova and contrasts}
 # reshape data to wide format for ancova
 data_wide <- data_merged %>%
   pivot_wider(
@@ -694,6 +677,7 @@ data_wide <- data_merged %>%
     ))
   )
 
+
 data_wide_unscaled <- data_merged %>%
   pivot_wider(
     id_cols = c(
@@ -716,9 +700,15 @@ data_wide_unscaled <- data_merged %>%
     ))
   )
 
-contrasts.treatment <- cbind(c(-1 / 2, 1 / 2))
-colnames(contrasts.treatment) <- c("-c+t")
-contrasts(data_wide$treatment) <- contrasts.treatment
+## define contrast Control vs Exp1+Exp2 - vermutlich bessere version, da die Estimates "stimmen"
+mat <- cbind(
+  c(1 / 3, 1 / 3, 1 / 3), # Durchschnitt aller 3 Gruppen
+  c(-1, .5, .5), # Vergleich Control vs Mittel der beiden Interventions-Gruppen
+  c(0, -1, 1)
+) # Vergleich Sprache vs MINT
+contrasts.CvsExp <- solve(t(mat))[, -1]
+colnames(contrasts.CvsExp) <- c("-c+STEM_language", "-STEM+language")
+contrasts(data_wide$intervention) <- contrasts.CvsExp
 
 contrasts.gender <- cbind(c(-1 / 2, 1 / 2))
 colnames(contrasts.gender) <- c("-f+m")
@@ -757,28 +747,49 @@ ancovas_two_groups <- lapply(
 names(ancovas_two_groups) <- outcomes
 ```
 
+
+# Results
+
+
 ::: {.callout-note}
-Do we need to add location back into the ancova analysis?
+
+Im 25er paper war hier noch die referenz zu den pretest data der participants. das geht in der form mit den verschiedenen skalen und unterschiedlichen samplesizes nicht mehr. wollen wir ne alternative oder brauchen wir das hier nicht, weil wir später eh auf jede skale + subskalen eingehen.
+
 :::
-# Results (Todo Bene)
 
-Descriptive statistics of students' pretest scores are presented in [@tbl-participants].
-As expected, students attending the STEM course and students from the control group, which was recruited from pre-service STEM teachers, reported significantly higher ratings in all Intelligent TPACK subscales compared to students attending language course, which predominantly consisted of students not studying a STEM subject as their second subject. We didn't find significant differences between the intervention groups for AI literacy, AI ethics, and perceived usefulness at the pretest.
 
-The descriptive statistics of students' change in the outcome measures over time per treatment group are listed in  [@fig-ai-lit], [@fig-tpack], and [@fig-pu].
+<!-- Descriptive statistics of students' pretest scores are presented in [@tbl-participants].
+As expected, students attending the STEM course and students from the control group, which was recruited from pre-service STEM teachers, reported significantly higher ratings in all Intelligent TPACK subscales compared to students attending language course, which predominantly consisted of students not studying a STEM subject as their second subject. We didn't find significant differences between the intervention groups for AI literacy, AI ethics, and perceived usefulness at the pretest. -->
 
-For all outcome measure, we will first report the *main* treatment effect, i.e., the interaction between time and treatment group. Then, we will report the differences between treatment groups, i.e., control vs. intervention groups (STEM and language course), and then contrast the intervention groups, i.e., STEM vs. language course.
+The descriptive statistics for students’ outcome measures at pretest and posttest by treatment group are shown in the top half of [@fig-ai-lit], [@fig-tpack], and [@fig-pu]. On the bottom half of those figures we display the ANCOVA-adjusted predicted (self-reported) posttest scores, with predictions standardized to a common pretest value and adjusted for gender and semester count.
+
+For all outcome measures, we first report the main effect of treatment condition on posttest scores after adjusting for pretest scores, gender, and semester count. We then report the planned contrasts comparing the control group with the intervention groups and the contrast between the two intervention groups (STEM vs. language course).
 
 ## AI Literacy
+Descriptive results of students' AI literacy scores are shown in the top half of [@fig-ai-lit] with the ANCOVA-adjusted predicted posttest scores, with predictions standardized to a common pretest value and adjusted for gender and semester count, underneath. The results of the ANCOVA models are listed in [@tbl-ancova-ailit-summary].
+
+todo beschreiben wie die daten aussehen:
+- stem gruppe startet bei allen 3 skalen auf höherem niveau als die sprach und kontrollgruppe
+- posttest scores immer höher als control gruppe 
+- verbesserung zwischen pre und posttest sichtbar bei interventionsgruppen
+
+The ANCOVA results indicated significantly greater gains in AI literacy in the intervention groups compared to the control group. This pattern was found for the full AI literacy scale, the study-specific subset, and the GLAT subset. Pairwise contrasts indicated significant differences between the STEM group and the control group across all three outcomes, whereas the language group differed significantly from the control group for the full scale and the GLAT subset.
+
+
+::: {.callout-note}
+Mit dem aktuellen Setup kann ich die y-achse zwischen den subscales nicht unterschiedlich setzen. Nur gesamt für eine Reihe ist das möglich. Ist das essentiell? Ich finde so erzählts auch schon ne ganz gute story
+
+:::
+
 
 ```{r fig-ai-lit, echo=FALSE, fig.cap="Descriptive Statistics of Students' AI Literacy Scores Over Time by Treatment Group.", out.width="100%"}
 ######################## predict, aggregate, transform to long, and plot
 
 # Define outcome scale labels
 ailit_labels <- c(
-  AILIT26 = "AI Literacy - Full Scale 26",
-  AILITwolke = "AI Literacy - Study Specific",
-  AILITglat = "AI Literacy - GLAT"
+  AILIT26 = "Full Scale",
+  AILITwolke = "Study Specific",
+  AILITglat = "GLAT"
 )
 
 # Prepare data: compute predictions + reshape to long format
@@ -810,7 +821,7 @@ p_ailit_pred <- plot_facet_outcome(
   data_ailit_plot_long_individual,
   ncol = 3,
   outcome_labels = NULL, # Hide labels in row 2
-  y_title = "ANCOVA adjusted score",
+  y_title = "ANCOVA adj. score",
   y_zoom = NULL,
   show_legend = TRUE,
   show_strip_labels = FALSE,
@@ -824,7 +835,6 @@ p_ailit_pred <- plot_facet_outcome(
 # Combine and display
 combine_raw_pred_plots(p_ailit_raw, p_ailit_pred)
 ```
-
 
 ```{r tab.layout = "autofit"}
 #| label: tbl-ancova-ailit-summary
@@ -856,23 +866,39 @@ ailit_ancova_between_contrasts <- lapply(ancovas[1:3], function(m) {
 if (!is_word) {
   print(ailit_ancova_between_contrasts)
 }
+ailit_ancova_between_contrasts
 ```
+
+### AI Literacy -- Full Scale
+<!-- 26 full scale -->
+For the full AI literacy scale, students in the intervention groups showed significantly greater improvement than students in the control group, `r report_beta(ancovas[[1]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[[1]], "intervention-STEM+language")`.
+
+### AI Literacy -- Study Specific Subset
+For the study-specific subset of the AI literacy items, we found a significant small-to-medium-sized effect of treatment condition on students’ gains in AI literacy, `r report_beta(ancovas[[2]], "intervention-c+STEM_language")`, with students in the intervention groups showing significantly stronger gains than students in the control group. In addition, the two intervention groups differed significantly, `r report_beta(ancovas[[2]], "intervention-STEM+language")`, with a medium-sized effect in favor of pre-service STEM teachers compared to pre-service language teachers.
+
+### AI Literacy -- GLAT Subset
+For the GLAT subset of the AI literacy items, we found a significant large effect of treatment condition on students’ gains in AI literacy, `r report_beta(ancovas[[3]], "intervention-c+STEM_language")`, indicating stronger gains in the intervention groups than in the control group. The two intervention groups did not differ significantly, `r report_beta(ancovas[[3]], "intervention-STEM+language")`.
+
+As can be seen in [@fig-ai-lit], students in both intervention groups showed descriptively stronger increases in AI literacy than students in the control group. Pairwise post-hoc contrasts showed that students in the STEM course had significantly higher adjusted posttest scores than students in the control group on all three AI literacy outcomes: the full scale, `r report_contrast_beta(ailit_ancova_between_contrasts[[1]], 1)`, the study-specific subset, `r report_contrast_beta(ailit_ancova_between_contrasts[[2]], 1)`, and the GLAT subset, `r report_contrast_beta(ailit_ancova_between_contrasts[[3]], 1)`. Students in the language course also had significantly higher adjusted posttest scores than students in the control group on the full scale, `r report_contrast_beta(ailit_ancova_between_contrasts[[1]], 2)`, and the GLAT subset, `r report_contrast_beta(ailit_ancova_between_contrasts[[3]], 2)`, but not on the study-specific subset, `r report_contrast_beta(ailit_ancova_between_contrasts[[2]], 2)`. Finally, students in the STEM course had significantly higher adjusted posttest scores than students in the language course on the study-specific subset, `r report_contrast_beta(ailit_ancova_between_contrasts[[2]], 3)`, while the corresponding difference on the GLAT subset was marginally significant, `r report_contrast_beta(ailit_ancova_between_contrasts[[3]], 3)`.
 
 
 ## Intelligent TPACK and AI Ethics
+The descriptive results of students' ratings of perceived knowledge in Intelligent TPACK and AI ethics as well as the ANCOVA-adjusted predicted posttest ratings are shown in [@fig-tpack], and [@tbl-ancova-tpack-summary] lists the results of the ANCOVA. As can be seen in [@fig-tpack], all pre-service teachers reported their intelligent TPACK knowledge to be around the middle of the scale at the pretest, while the intervention groups reported, on average, values _significantly_ higher than the middle value of the scale at the posttest.
 
-```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%"} 
-# ,fig.width=7, fig.height=6.5}
+For all subscales related to Intelligent TPACK, namely Intelligent TK, Intelligent TPK, Intelligent TCK, Intelligent TPACK, and AI ethics, we found a significant effect of treatment condition on students’ self-reported posttest ratings. Students in both intervention groups reported significantly higher posttest ratings than students in the control group on the Intelligent TPACK-related subscales, whereas the two intervention groups did not differ significantly from each other, see [@tbl-ancova-tpack-summary] for an overview.
+
+```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
+#
 # ========================================
 # TPACK: Comparison Plots (Raw vs Predicted)
 # ========================================
 
 tpack_labels <- c(
-  TK = "Intelligent TK",
-  TPK = "Intelligent TPK",
-  TCK = "Intelligent TCK",
-  TPACKce = "Intelligent TPACK - Core",
-  TPACKgenai = "iTPACK - Generative AI",
+  TK = "iTK",
+  TPK = "iTPK",
+  TCK = "iTCK",
+  TPACKce = "iTPACK",
+  TPACKgenai = "GenAI",
   Ethics = "AI Ethics"
 )
 
@@ -896,7 +922,7 @@ p_tpack_raw <- plot_facet_outcome(
   data_merged_long %>% filter(str_detect(outcome, "^(T|Ethics)")),
   ncol = 6,
   outcome_labels = tpack_labels,
-  y_title = NULL,
+  y_title = "Rating",
   y_zoom = c(2, 4.5),
   show_legend = FALSE,
   show_strip_labels = TRUE,
@@ -911,7 +937,7 @@ p_tpack_pred <- plot_facet_outcome(
   data_tpack_plot_long_individual,
   ncol = 6,
   outcome_labels = NULL, # Hide labels in row 2
-  y_title = "ANCOVA adjusted rating",
+  y_title = "ANCOVA adj. rating",
   y_zoom = c(2, 4.5),
   show_legend = TRUE,
   show_strip_labels = FALSE,
@@ -924,7 +950,6 @@ p_tpack_pred <- plot_facet_outcome(
 # Combine and display
 combine_raw_pred_plots(p_tpack_raw, p_tpack_pred)
 ```
-
 
 ```{r tab.layout="autofit"}
 #| label: tbl-ancova-tpack-summary
@@ -941,8 +966,40 @@ if (is_word) {
 ft_ancova
 ```
 
+### Intelligent TK
+For Intelligent TK, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["TK"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["TK"]], "intervention-STEM+language")`.
+
+### Intelligent TPK
+For Intelligent TPK, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["TPK"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["TPK"]], "intervention-STEM+language")`.
+
+### Intelligent TCK
+For Intelligent TCK, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["TCK"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["TCK"]], "intervention-STEM+language")`.
+
+### Intelligent TPACK Core
+For the Intelligent TPACK core subscale, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["TPACKce"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["TPACKce"]], "intervention-STEM+language")`.
+
+### Intelligent TPACK (GenAI)
+For Intelligent TPACK related to GenAI, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["TPACKgenai"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["TPACKgenai"]], "intervention-STEM+language")`.
+
+### AI Ethics
+For AI ethics, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["Ethics"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["Ethics"]], "intervention-STEM+language")`.
+
+
 ## Critical Evaluation of AI (CEA)
+todo: 
+1) daten beschreiben
+- help me out here
+2) ancova ergebnisse zusammenfassen
+For the CEA scale and its subscales, we found a significant effect of treatment condition on students’ self-reported posttest ratings. Students in both intervention groups reported significantly higher posttest ratings than students in the control group on the overall CEA scale, CEA understanding, and CEA pedagogical use, see [@tbl-ancova-cea-summary] for an overview.
+
+
+::: {.callout-note}
+
 Note für uns: ggf. reduzieren wir CEA auf eine Skala mit 9 Items. Im Piloten haben wir 15 items getestet und EFA hat gezeigt, dass Reduktion auf 2 Skalen möglich wäre. Das haben wir gemacht, und die funktionieren auch, aber ein Item lädt z.B. ziemlich stark auf die andere Skala. Entweder bekommt man das gut begründet, aber den richtigen Mehrwert sehe ich nicht, 2 Skalen aufzustellen. So oder so, es haben alle Skalen gut funktioniert und zeigen den Mehrwert vom Seminar.
+Ggf. einfach auf eine Full Scale runterbrechen, sagen dass man den fragebogen soweit möglich evaluiert hat, items reduziert hat und das reicht dann.
+
+:::
+
 
 ```{r fig-cea, echo=FALSE, fig.cap="Descriptive Statistics of Students' Critical Evaluation of AI Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
 n_cea <- data_merged_long %>%
@@ -951,36 +1008,11 @@ n_cea <- data_merged_long %>%
   summarise(n = n_distinct(code)) %>%
   pull(n)
 
-# Critical Evaluation of AI
-p_cea <- plot_outcome(
-  data_merged_long %>% filter(str_detect(outcome, "^(CEA)"))
-) +
-  ggtitle("Critical Evaluation of AI (CEA)")
-
-p_cea +
-  facet_wrap(
-    ~outcome,
-    scales = "fixed",
-    ncol = 2,
-    labeller = labeller(
-      outcome = c(
-        CEA = "Critical Evaluation of AI (CEA) - Full Scale",
-        CEA_understanding = "Critical Understanding of AI",
-        CEA_ped = "Pedagogical Evaluation of AI Output"
-      )
-    )
-  ) +
-  labs(
-    title = "Critical Evaluation of AI (CEA)",
-    subtitle = paste0("N = ", n_cea)
-  ) +
-  theme(legend.position = "bottom")
-
 
 cea_labels <- c(
-  CEA = "Critical Evaluation of AI (CEA) - Full Scale",
-  CEA_understanding = "Critical Understanding of AI",
-  CEA_ped = "Pedagogical Evaluation of AI Output"
+  CEA = "Full Scale",
+  CEA_understanding = "Critical Understanding \nof AI",
+  CEA_ped = "Pedagogical Evaluation \nof AI Output"
 )
 
 # Prepare data: compute predictions + reshape to long format
@@ -1003,11 +1035,11 @@ p_cea_raw <- plot_facet_outcome(
   data_merged_long %>% filter(str_detect(outcome, "^(CEA)")),
   ncol = 3,
   outcome_labels = cea_labels,
-  y_title = NULL,
+  y_title = "Rating",
   y_zoom = c(3.2, 4.8),
   show_legend = FALSE,
   show_strip_labels = TRUE,
-  plot_title = "Critical Evaluation of AI",
+  plot_title = "Critical Evaluation of AI (CEA)",
   plot_subtitle = paste0("N = ", n_cea),
   error_bars = TRUE
   # show_n_per_facet = TRUE
@@ -1018,7 +1050,7 @@ p_cea_pred <- plot_facet_outcome(
   data_cea_plot_long_individual,
   ncol = 3,
   outcome_labels = NULL, # Hide labels in row 2
-  y_title = "ANCOVA adjusted rating",
+  y_title = "ANCOVA adj. rating",
   y_zoom = c(3.2, 4.8),
   show_legend = TRUE,
   show_strip_labels = FALSE,
@@ -1050,6 +1082,23 @@ ft_cea_ancova
 
 :::
 
+### CEA
+
+For the overall CEA scale, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["CEA"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["CEA"]], "intervention-STEM+language")`.
+
+### CEA Understanding
+
+For CEA understanding, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["CEA_understanding"]], "intervention-c+STEM_language")`, indicating a large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["CEA_understanding"]], "intervention-STEM+language")`.
+
+### CEA Pedagogical Use
+
+For CEA pedagogical use, students in the intervention groups reported significantly greater improvement than students in the control group, `r report_beta(ancovas[["CEA_ped"]], "intervention-c+STEM_language")`, indicating a medium-to-large positive effect in favor of the intervention groups. The two intervention groups did not differ significantly from each other, `r report_beta(ancovas[["CEA_ped"]], "intervention-STEM+language")`.
+
+## CEA Validity
+
+The newly developed CEA scale showed good internal consistency at pretest, Cronbach’s α = .86. Internal consistency was acceptable for CEA understanding, α = .66, and good for CEA pedagogical use, α = .83. The data were suitable for factor analysis, KMO = .87; Bartlett’s test: χ²(36) = 518.49, *p* < .001. Parallel analysis suggested a two-factor solution. The two-factor EFA showed acceptable fit, χ²(19) = 29.23, *p* = .062, CFI = .982, RMSEA = .079, and explained 63.9% of the variance, broadly supporting a two-dimensional structure of the scale.
+
+
 ``` {r Exploring CEA data}
 # cronbach alpha
 alphas <- imap(
@@ -1059,7 +1108,8 @@ alphas <- imap(
     warnings = FALSE
   )
 )
-alphas
+(alphas$CEA)$total
+
 # 0.86 alpha, kein item lohnt sich rauszunehmen
 
 data_merged_post <- data_merged %>% filter(time == "post" & CEA != "NaN")
@@ -1091,8 +1141,6 @@ cea_efa <- lavaan::efa(
 
 summary(cea_efa, nd = 3L, cutoff = 0.3, dot.cutoff = 0.05)
 ```
-
-Results from efa and cronbachs alpha confirm our exploration and adjustments from pilot data. we have a good scale in CEA.
 
 
 ## Two Groups (Control vs. Intervention)

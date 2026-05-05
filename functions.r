@@ -1,3 +1,137 @@
+report_beta <- function(model, term, digits = 2, p_digits = 3, italic = TRUE) {
+  coefs <- summary(model)$coefficients
+
+  if (!term %in% rownames(coefs)) {
+    stop(sprintf("Term '%s' not found in model.", term))
+  }
+
+  b <- coefs[term, "Estimate"]
+  se <- coefs[term, "Std. Error"]
+  t <- coefs[term, "t value"]
+  p <- coefs[term, "Pr(>|t|)"]
+  df <- coefs[term, "DF"]
+
+  fmt_num <- function(x, d = digits) {
+    formatC(x, format = "f", digits = d)
+  }
+
+  fmt_df <- function(x) {
+    if (abs(x - round(x)) < .001) {
+      as.character(round(x))
+    } else {
+      fmt_num(x, digits)
+    }
+  }
+
+  fmt_p <- function(p, digits = p_digits) {
+    if (is.na(p)) {
+      return("= NA")
+    }
+    if (p < .001) {
+      return("< .001")
+    }
+    out <- formatC(p, format = "f", digits = digits)
+    out <- sub("^0", "", out)
+    paste0("= ", out)
+  }
+
+  if (italic) {
+    paste0(
+      "$\\beta$ = ",
+      fmt_num(b),
+      ", *SE* = ",
+      fmt_num(se),
+      ", *t*(",
+      fmt_df(df),
+      ") = ",
+      fmt_num(t),
+      ", *p* ",
+      fmt_p(p, p_digits)
+    )
+  } else {
+    paste0(
+      "\u03b2 = ",
+      fmt_num(b),
+      ", SE = ",
+      fmt_num(se),
+      ", t(",
+      fmt_df(df),
+      ") = ",
+      fmt_num(t),
+      ", p ",
+      fmt_p(p, p_digits)
+    )
+  }
+}
+
+report_contrast_beta <- function(
+  contrast_obj,
+  row = 1,
+  digits = 2,
+  p_digits = 3,
+  italic = TRUE
+) {
+  tab <- as.data.frame(contrast_obj)
+
+  b <- tab$estimate[row]
+  se <- tab$SE[row]
+  t <- tab$t.ratio[row]
+  p <- tab$p.value[row]
+  df <- tab$df[row]
+
+  fmt_num <- function(x, d = digits) {
+    formatC(x, format = "f", digits = d)
+  }
+
+  fmt_df <- function(x) {
+    if (abs(x - round(x)) < .001) {
+      as.character(round(x))
+    } else {
+      fmt_num(x, digits)
+    }
+  }
+
+  fmt_p <- function(p, digits = p_digits) {
+    if (is.na(p)) {
+      return("= NA")
+    }
+    if (p < .001) {
+      return("< .001")
+    }
+    out <- formatC(p, format = "f", digits = digits)
+    out <- sub("^0", "", out)
+    paste0("= ", out)
+  }
+
+  if (italic) {
+    paste0(
+      "$\\beta$ = ",
+      fmt_num(b),
+      ", *SE* = ",
+      fmt_num(se),
+      ", *t*(",
+      fmt_df(df),
+      ") = ",
+      fmt_num(t),
+      ", *p* ",
+      fmt_p(p, p_digits)
+    )
+  } else {
+    paste0(
+      "\u03b2 = ",
+      fmt_num(b),
+      ", SE = ",
+      fmt_num(se),
+      ", t(",
+      fmt_df(df),
+      ") = ",
+      fmt_num(t),
+      ", p ",
+      fmt_p(p, p_digits)
+    )
+  }
+}
+
 #' Report one contrast from an emmeans contrast object in APA style
 #'
 #' This function extracts the estimate, standard error, and p-value from a
@@ -170,7 +304,7 @@ plot_outcome <- function(
       color = get(groups),
       group = get(groups)
     )) +
-    stat_summary(fun.data = mean_se, aes(shape = get(groups))) +
+    stat_summary(fun = mean, geom = "point", aes(shape = get(groups))) +
     stat_summary(
       fun.data = mean_se,
       geom = "line",
@@ -507,7 +641,7 @@ modelsummary_models <- function(
     output = output,
     # estimate = "{estimate}{stars} \n ({std.error}) p={p.value}",
     statistic = c("SE" = "std.error", "t" = "statistic", "p" = "p.value"),
-    estimate = c("b" = "{estimate}{stars}"),
+    estimate = c("β" = "{estimate}{stars}"),
     #statistic=NULL,
     shape = term ~ model + statistic,
     title = title,
