@@ -24,7 +24,7 @@ format:
     date-format: long  
     code-fold: true
     code-tools: true
-  docx: 
+  docx:
     toc: true
     toc-depth: 2
     number-sections: true
@@ -35,6 +35,13 @@ format:
     keep-md: true
     echo: false
     code-fold: true
+  latex:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    fig-caption: true
+    date-format: long
+    echo: false
 prefer-html: true
 ---
 
@@ -836,6 +843,65 @@ p_ailit_pred <- plot_facet_outcome(
 combine_raw_pred_plots(p_ailit_raw, p_ailit_pred)
 ```
 
+
+```{r fig-ai-lit26, echo=FALSE, fig.cap="Descriptive Statistics of Students' AI Literacy Scores Over Time by Treatment Group.", out.width="100%"}
+######################## predict, aggregate, transform to long, and plot
+
+# Define outcome scale labels
+ailit_labels <- c(
+  AILIT26 = "Full Scale",
+  AILITwolke = "Study Specific",
+  AILITglat = "GLAT"
+)
+
+# Prepare data: compute predictions + reshape to long format
+# filter P02 codes (26 data)
+data_ailit_plot_long_individual <- prepare_comparison_data(
+  data_wide_unscaled,
+  outcomes_ailit,
+  ailit_labels,
+  ancovas_unscaled
+) %>%
+  filter(str_starts(code, "P20"))
+
+# Raw data plot
+p_ailit_raw <- plot_facet_outcome(
+  data_merged_long %>%
+    filter(str_detect(outcome, "^(AILIT)"), str_starts(code, "P20")),
+  ncol = 3,
+  outcome_labels = ailit_labels,
+  y_title = "Score",
+  y_zoom = NULL,
+  show_legend = FALSE,
+  show_strip_labels = TRUE,
+  plot_title = "AI Literacy 26 only",
+  plot_subtitle = NULL,
+  error_bars = TRUE,
+  show_n_per_facet = TRUE,
+  ylab = "Score"
+)
+
+# Predicted adjusted data plot
+p_ailit_pred <- plot_facet_outcome(
+  data_ailit_plot_long_individual,
+  ncol = 3,
+  outcome_labels = NULL, # Hide labels in row 2
+  y_title = "ANCOVA adj. score",
+  y_zoom = NULL,
+  show_legend = TRUE,
+  show_strip_labels = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE,
+  # show_n_per_facet = TRUE,
+  ylab = "Score"
+)
+
+# Combine and display
+combine_raw_pred_plots(p_ailit_raw, p_ailit_pred)
+```
+
+
 ```{r tab.layout = "autofit"}
 #| label: tbl-ancova-ailit-summary
 #| tbl-cap: "Summary of Multiple Regression Models for AI Literacy."
@@ -885,7 +951,7 @@ As can be seen in [@fig-ai-lit], students in both intervention groups showed des
 ## Intelligent TPACK and AI Ethics
 The descriptive results of students' ratings of perceived knowledge in Intelligent TPACK and AI ethics as well as the ANCOVA-adjusted predicted posttest ratings are shown in [@fig-tpack], and [@tbl-ancova-tpack-summary] lists the results of the ANCOVA. As can be seen in [@fig-tpack], all pre-service teachers reported their intelligent TPACK knowledge to be around the middle of the scale at the pretest, while the intervention groups reported, on average, values _significantly_ higher than the middle value of the scale at the posttest.
 
-For all subscales related to Intelligent TPACK, namely Intelligent TK, Intelligent TPK, Intelligent TCK, Intelligent TPACK, and AI ethics, we found a significant effect of treatment condition on students’ self-reported posttest ratings. Students in both intervention groups reported significantly higher posttest ratings than students in the control group on the Intelligent TPACK-related subscales, whereas the two intervention groups did not differ significantly from each other, see [@tbl-ancova-tpack-summary] for an overview.
+For all subscales related to Intelligent TPACK, namely Intelligent TK, Intelligent TPK, Intelligent TCK, Intelligent TPACK, and AI ethics, we found a significant effect of treatment condition on students’ self-reported posttest ratings. Students in both intervention groups reported significantly higher posttest ratings than students in the control group on the Intelligent TPACK-related subscales, whereas the two intervention groups did not differ significantly from each other, see [@tbl-ancova-tpack-summary] for an overview. 
 
 ```{r fig-tpack, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
 #
@@ -927,6 +993,74 @@ p_tpack_raw <- plot_facet_outcome(
   show_legend = FALSE,
   show_strip_labels = TRUE,
   plot_title = "Intelligent TPACK and AI Ethics",
+  plot_subtitle = paste0("N = ", n_tpack),
+  error_bars = TRUE
+  # show_n_per_facet = TRUE
+)
+
+# Predicted adjusted data plot
+p_tpack_pred <- plot_facet_outcome(
+  data_tpack_plot_long_individual,
+  ncol = 6,
+  outcome_labels = NULL, # Hide labels in row 2
+  y_title = "ANCOVA adj. rating",
+  y_zoom = c(2, 4.5),
+  show_legend = TRUE,
+  show_strip_labels = FALSE,
+  plot_title = NULL,
+  plot_subtitle = NULL,
+  error_bars = FALSE
+  # show_n_per_facet = TRUE
+)
+
+# Combine and display
+combine_raw_pred_plots(p_tpack_raw, p_tpack_pred)
+```
+
+
+```{r fig-tpack26, echo=FALSE, fig.cap="Descriptive Statistics of Students' Intelligent TPACK and AI Ethics Ratings Over Time by Treatment Group.", out.width="100%",fig.width=7, fig.height=6.5}
+#
+# ========================================
+# TPACK: Comparison Plots (Raw vs Predicted)
+# ========================================
+
+tpack_labels <- c(
+  TK = "iTK",
+  TPK = "iTPK",
+  TCK = "iTCK",
+  TPACKce = "iTPACK",
+  TPACKgenai = "GenAI",
+  Ethics = "AI Ethics"
+)
+
+# Prepare data: compute predictions + reshape to long format
+data_tpack_plot_long_individual <- prepare_comparison_data(
+  data_wide_unscaled,
+  outcomes_tpack,
+  tpack_labels,
+  ancovas_unscaled
+) %>%
+  filter(str_starts(code, "P20"))
+
+# Get sample size
+n_tpack <- data_merged_long %>%
+  filter(outcome %in% outcomes_tpack) %>%
+  filter(!is.na(score)) %>%
+  filter(str_starts(code, "P20")) %>%
+  summarise(n = n_distinct(code)) %>%
+  pull(n)
+
+# Raw data plot
+p_tpack_raw <- plot_facet_outcome(
+  data_merged_long %>%
+    filter(str_detect(outcome, "^(T|Ethics)"), str_starts(code, "P20")),
+  ncol = 6,
+  outcome_labels = tpack_labels,
+  y_title = "Rating",
+  y_zoom = c(2, 4.5),
+  show_legend = FALSE,
+  show_strip_labels = TRUE,
+  plot_title = "Intelligent TPACK and AI Ethics 26 data",
   plot_subtitle = paste0("N = ", n_tpack),
   error_bars = TRUE
   # show_n_per_facet = TRUE
